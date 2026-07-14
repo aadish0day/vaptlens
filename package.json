@@ -1,0 +1,34 @@
+{
+  "name": "vapt-dashboard",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Universal client-side VAPT scan analytics dashboard (Power BI-style) for vulnerability scan data.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "lint": "tsc --noEmit"
+  },
+  "dependencies": {
+    "lucide-react": "^0.460.0",
+    "papaparse": "^5.4.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-grid-layout": "^1.4.4",
+    "recharts": "^2.13.3",
+    "zustand": "^5.0.1"
+  },
+  "devDependencies": {
+    "@types/papaparse": "^5.3.15",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@types/react-grid-layout": "^1.3.5",
+    "@vitejs/plugin-react": "^4.3.3",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.15",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.11"
+  }
+}

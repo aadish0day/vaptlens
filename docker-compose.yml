@@ -1,0 +1,6 @@
+services:
+  vapt-dashboard:
+    build: .
+    ports:
+      - "8080:80"
+    restart: unless-stopped

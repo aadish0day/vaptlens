@@ -1,0 +1,71 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    margin: 0;
+    background-color: #0b0e14;
+    color: #e6edf3;
+    font-family: "Inter", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  *:focus-visible {
+    outline: none;
+  }
+}
+
+/* react-grid-layout: quiet, on-brand resize/drag affordances */
+.react-grid-item.react-grid-placeholder {
+  background: #3ddc97 !important;
+  opacity: 0.15;
+  border-radius: 6px;
+}
+
+.react-grid-item > .react-resizable-handle {
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.react-grid-item:hover > .react-resizable-handle {
+  opacity: 0.6;
+}
+
+.react-grid-item > .react-resizable-handle::after {
+  border-right-color: #3ddc97;
+  border-bottom-color: #3ddc97;
+}
+
+.react-grid-item.react-draggable-dragging {
+  z-index: 20;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-scanline {
+    animation: none !important;
+  }
+  * {
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Thin scrollbars to match the technical aesthetic */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: #212b3d;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
