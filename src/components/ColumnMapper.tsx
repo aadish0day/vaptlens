@@ -4,6 +4,18 @@ import { useDashboardStore } from "../store/useDashboardStore";
 import { guessMapping } from "../lib/presets";
 import { parseCsv } from "../lib/parseCsv";
 import type { ColumnMapping } from "../lib/types";
+import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
+import { Button } from "./ui/button";
+import { Input } from "./ui/input";
+import { Label } from "./ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "./ui/select";
+import { Badge } from "./ui/badge";
 
 const TARGET_FIELDS: { key: keyof ColumnMapping; label: string; required?: boolean }[] = [
   { key: "host", label: "Host / IP", required: true },
@@ -78,94 +90,95 @@ export function ColumnMapper() {
   };
 
   return (
-    <div className="rounded-md border border-border bg-bg p-3">
-      <div className="mb-2 flex items-center gap-2">
-        <span className="font-mono text-xs font-semibold text-text">
-          Map columns — {pending.batch.label}
-        </span>
-        <span className="rounded bg-sev-high/15 px-1.5 py-0.5 font-mono text-[10px] text-sev-high">
-          unrecognized
-        </span>
-      </div>
+    <Card className="border-primary/40">
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between gap-2">
+          <CardTitle className="text-sm">Map columns</CardTitle>
+          <Badge variant="muted">unrecognized</Badge>
+        </div>
+        <p className="text-xs text-muted-foreground">{pending.batch.label}</p>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {mappings.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+              Presets
+            </span>
+            {mappings.map((m) => (
+              <button
+                key={m.name}
+                type="button"
+                onClick={() => applyPreset(m.name)}
+                className="rounded-full border border-border bg-card px-2.5 py-0.5 text-[11px] font-medium text-muted-foreground transition-colors hover:border-primary/50 hover:text-primary"
+              >
+                {m.name}
+              </button>
+            ))}
+          </div>
+        )}
 
-      {mappings.length > 0 && (
-        <div className="mb-2 flex flex-wrap items-center gap-1.5">
-          <span className="font-mono text-[10px] uppercase text-muted">Presets:</span>
-          {mappings.map((m) => (
-            <button
-              key={m.name}
-              onClick={() => applyPreset(m.name)}
-              className="rounded border border-border px-2 py-0.5 font-mono text-[10px] text-muted hover:border-accent hover:text-accent"
-            >
-              {m.name}
-            </button>
+        <div className="space-y-2">
+          {TARGET_FIELDS.map((f) => (
+            <div key={f.key} className="flex items-center gap-2">
+              <Label className="w-36 shrink-0">
+                {f.label}
+                {f.required && <span className="text-destructive"> *</span>}
+              </Label>
+              <ArrowRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+              <Select
+                value={mapping[f.key] ?? "__none"}
+                onValueChange={(v) => setField(f.key, v === "__none" ? "" : v)}
+              >
+                <SelectTrigger className="flex-1">
+                  <SelectValue placeholder="— none —" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none">— none —</SelectItem>
+                  {pending.headers.map((h) => (
+                    <SelectItem key={h} value={h}>
+                      {h}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           ))}
         </div>
-      )}
 
-      <div className="space-y-1.5">
-        {TARGET_FIELDS.map((f) => (
-          <div key={f.key} className="flex items-center gap-2">
-            <span className="w-36 shrink-0 truncate font-mono text-[11px] text-text">
-              {f.label}
-              {f.required && <span className="text-sev-critical"> *</span>}
-            </span>
-            <ArrowRight size={12} className="shrink-0 text-muted" />
-            <select
-              value={mapping[f.key] ?? ""}
-              onChange={(e) => setField(f.key, e.target.value)}
-              className="min-w-0 flex-1 rounded border border-border bg-panel px-2 py-1 font-mono text-[11px] text-text focus:border-accent focus:outline-none"
-            >
-              <option value="">— none —</option>
-              {pending.headers.map((h) => (
-                <option key={h} value={h}>
-                  {h}
-                </option>
-              ))}
-            </select>
-          </div>
-        ))}
-      </div>
+        <div className="flex flex-wrap items-center gap-2 border-t border-border pt-3">
+          <Label htmlFor="tool" className="text-muted-foreground">
+            Tool
+          </Label>
+          <Input
+            id="tool"
+            value={toolName}
+            onChange={(e) => setToolName(e.target.value)}
+            className="w-32"
+          />
+          <Input
+            value={presetName}
+            onChange={(e) => setPresetName(e.target.value)}
+            placeholder="preset name"
+            className="w-32"
+          />
+          <Button variant="outline" size="sm" onClick={handleSavePreset}>
+            <Save className="h-4 w-4" /> Save
+          </Button>
+        </div>
 
-      <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border pt-3">
-        <label className="font-mono text-[11px] text-muted">Tool</label>
-        <input
-          value={toolName}
-          onChange={(e) => setToolName(e.target.value)}
-          className="w-32 rounded border border-border bg-panel px-2 py-1 font-mono text-[11px] text-text focus:border-accent focus:outline-none"
-        />
-        <input
-          value={presetName}
-          onChange={(e) => setPresetName(e.target.value)}
-          placeholder="preset name"
-          className="w-28 rounded border border-border bg-panel px-2 py-1 font-mono text-[11px] text-text focus:border-accent focus:outline-none placeholder:text-muted"
-        />
-        <button
-          onClick={handleSavePreset}
-          className="flex items-center gap-1 rounded border border-border px-2 py-1 font-mono text-[11px] text-muted hover:border-accent hover:text-accent"
-        >
-          <Save size={11} /> Save
-        </button>
-      </div>
+        {error && (
+          <p className="text-[11px] font-medium text-destructive">{error}</p>
+        )}
 
-      {error && (
-        <p className="mt-2 font-mono text-[11px] text-sev-critical">{error}</p>
-      )}
-
-      <div className="mt-3 flex justify-end gap-2">
-        <button
-          onClick={clearPendingUpload}
-          className="rounded px-3 py-1.5 font-mono text-xs text-muted hover:text-text"
-        >
-          Cancel
-        </button>
-        <button
-          onClick={handleSubmit}
-          className="rounded bg-accent px-3 py-1.5 font-mono text-xs font-semibold text-bg hover:bg-accent/85 focus:outline-none focus-visible:ring-1 focus-visible:ring-accent"
-        >
-          Import scan
-        </button>
-      </div>
-    </div>
+        <div className="flex justify-end gap-2 pt-1">
+          <Button variant="ghost" size="sm" onClick={clearPendingUpload}>
+            Cancel
+          </Button>
+          <Button size="sm" onClick={handleSubmit}>
+            Import scan
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
   );
 }

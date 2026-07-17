@@ -1,7 +1,7 @@
 import {
+  Area,
+  AreaChart,
   CartesianGrid,
-  Line,
-  LineChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -11,7 +11,7 @@ import type { ChartProps } from "./types";
 import { useChartTheme, seriesColor, primaryColor } from "../../lib/chart-theme";
 import { useTheme } from "../theme-provider";
 
-export function LineChartWidget({ widget, data, onSelect }: ChartProps) {
+export function AreaChartWidget({ widget, data, onSelect }: ChartProps) {
   const { theme } = useTheme();
   const dark = theme === "dark";
   const chart = useChartTheme();
@@ -33,11 +33,17 @@ export function LineChartWidget({ widget, data, onSelect }: ChartProps) {
 
   return (
     <ResponsiveContainer width="100%" height="100%">
-      <LineChart
+      <AreaChart
         data={data.pivot}
         margin={{ top: 8, right: 12, bottom: 4, left: 0 }}
         onClick={handleClick}
       >
+        <defs>
+          <linearGradient id="areaPrimary" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={primaryColor(dark)} stopOpacity={0.35} />
+            <stop offset="100%" stopColor={primaryColor(dark)} stopOpacity={0.02} />
+          </linearGradient>
+        </defs>
         <CartesianGrid stroke={chart.grid} vertical={false} />
         <XAxis
           dataKey="key"
@@ -67,28 +73,31 @@ export function LineChartWidget({ widget, data, onSelect }: ChartProps) {
           itemStyle={{ color: chart.tooltipText }}
         />
         {series.length > 0 ? (
-          series.map((s) => (
-            <Line
-              key={s}
-              type="monotone"
-              dataKey={s}
-              stroke={seriesColor(s, series.indexOf(s), dark)}
-              strokeWidth={2}
-              dot={{ r: 2.5, strokeWidth: 0 }}
-              activeDot={{ r: 4.5 }}
-            />
-          ))
+          series.map((s) => {
+            const c = seriesColor(s, series.indexOf(s), dark);
+            return (
+              <Area
+                key={s}
+                type="monotone"
+                dataKey={s}
+                stackId="a"
+                stroke={c}
+                strokeWidth={2}
+                fill={c}
+                fillOpacity={0.18}
+              />
+            );
+          })
         ) : (
-          <Line
+          <Area
             type="monotone"
             dataKey="value"
             stroke={primaryColor(dark)}
             strokeWidth={2}
-            dot={{ r: 2.5, strokeWidth: 0 }}
-            activeDot={{ r: 4.5 }}
+            fill="url(#areaPrimary)"
           />
         )}
-      </LineChart>
+      </AreaChart>
     </ResponsiveContainer>
   );
 }

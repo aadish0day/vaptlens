@@ -64,7 +64,66 @@ export type Aggregation =
   | "distinctHosts"
   | "distinctFindings";
 
-export type ChartType = "bar" | "donut" | "line" | "histogram" | "table" | "kpi";
+export const CHART_TYPES: ChartType[] = [
+  "bar",
+  "area",
+  "donut",
+  "line",
+  "radar",
+  "treemap",
+  "heatmap",
+  "scatter",
+  "histogram",
+  "table",
+  "kpi",
+];
+
+export const FIELD_KEYS: FieldKey[] = [
+  "severity",
+  "host",
+  "tool",
+  "scanLabel",
+  "port",
+  "protocol",
+  "cve",
+  "pluginId",
+  "name",
+  "cvssBucket",
+  "scanDate",
+];
+
+export const AGGREGATIONS: Aggregation[] = [
+  "count",
+  "avgCvss",
+  "maxCvss",
+  "distinctHosts",
+  "distinctFindings",
+];
+
+export function isChartType(v: unknown): v is ChartType {
+  return typeof v === "string" && (CHART_TYPES as string[]).includes(v);
+}
+
+export function isFieldKey(v: unknown): v is FieldKey {
+  return typeof v === "string" && (FIELD_KEYS as string[]).includes(v);
+}
+
+export function isAggregation(v: unknown): v is Aggregation {
+  return typeof v === "string" && (AGGREGATIONS as string[]).includes(v);
+}
+
+export type ChartType =
+  | "bar"
+  | "donut"
+  | "line"
+  | "area"
+  | "histogram"
+  | "radar"
+  | "treemap"
+  | "heatmap"
+  | "scatter"
+  | "table"
+  | "kpi";
 
 export interface WidgetConfig {
   id: string;

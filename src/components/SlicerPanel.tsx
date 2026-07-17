@@ -1,25 +1,44 @@
 import { useMemo } from "react";
-import { Search, X } from "lucide-react";
+import {
+  Search,
+  X,
+  ShieldAlert,
+  Wrench,
+  Server,
+  Network,
+  Layers,
+  CalendarDays,
+} from "lucide-react";
 import { useDashboardStore } from "../store/useDashboardStore";
-import { SEVERITIES, SEVERITY_COLORS } from "../lib/types";
+import { SEVERITIES, type Severity } from "../lib/types";
+import { SEVERITY_HEX } from "../lib/chart-theme";
+import { Checkbox } from "./ui/checkbox";
+import { ScrollArea } from "./ui/scroll-area";
+import { Separator } from "./ui/separator";
+import { cn } from "../lib/utils";
 
 function Section({
   title,
-  children,
+  icon,
   count,
+  children,
 }: {
   title: string;
-  children: React.ReactNode;
+  icon?: React.ReactNode;
   count?: number;
+  children: React.ReactNode;
 }) {
   return (
-    <div className="border-b border-border px-3 py-3">
-      <div className="mb-2 flex items-center justify-between">
-        <span className="font-mono text-[11px] font-semibold uppercase tracking-wider text-muted">
+    <div className="px-5 py-4">
+      <div className="mb-2.5 flex items-center justify-between">
+        <span className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+          {icon && <span className="text-muted-foreground/70">{icon}</span>}
           {title}
         </span>
-        {count !== undefined && (
-          <span className="font-mono text-[10px] text-muted">{count}</span>
+        {count !== undefined && count > 0 && (
+          <span className="rounded-full bg-secondary px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-muted-foreground">
+            {count}
+          </span>
         )}
       </div>
       {children}
@@ -27,37 +46,38 @@ function Section({
   );
 }
 
-function CheckList({
-  options,
-  selected,
+function CheckRow({
+  label,
+  count,
+  checked,
   onToggle,
+  dot,
 }: {
-  options: string[];
-  selected: string[];
-  onToggle: (v: string) => void;
+  label: string;
+  count?: number;
+  checked: boolean;
+  onToggle: () => void;
+  dot?: string;
 }) {
-  if (options.length === 0) {
-    return <p className="font-mono text-[11px] text-muted">No values.</p>;
-  }
   return (
-    <div className="max-h-44 space-y-1 overflow-auto pr-1">
-      {options.map((opt) => (
-        <label
-          key={opt}
-          className="flex cursor-pointer items-center gap-2 font-mono text-xs text-text"
-        >
-          <input
-            type="checkbox"
-            checked={selected.includes(opt)}
-            onChange={() => onToggle(opt)}
-            className="accent-accent"
-          />
-          <span className="truncate" title={opt}>
-            {opt}
-          </span>
-        </label>
-      ))}
-    </div>
+    <label className="flex cursor-pointer items-center gap-2.5 rounded-md px-2.5 py-2 transition-colors hover:bg-accent">
+      <Checkbox checked={checked} onCheckedChange={onToggle} />
+      {dot && (
+        <span
+          className="h-2 w-2 shrink-0 rounded-full"
+          style={{ backgroundColor: dot }}
+          aria-hidden
+        />
+      )}
+      <span className="min-w-0 flex-1 truncate text-sm text-foreground" title={label}>
+        {label}
+      </span>
+      {count !== undefined && (
+        <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
+          {count}
+        </span>
+      )}
+    </label>
   );
 }
 
@@ -69,16 +89,30 @@ export function SlicerPanel() {
   const clearFilters = useDashboardStore((s) => s.clearFilters);
   const batches = useDashboardStore((s) => s.batches);
 
-  const options = useMemo(() => {
-    const uniq = (f: (x: typeof findings[number]) => string | undefined) =>
-      Array.from(
-        new Set(findings.map(f).filter((v): v is string => !!v))
-      ).sort();
+  const { options, counts } = useMemo(() => {
+    const uniq = (f: (x: (typeof findings)[number]) => string | undefined) =>
+      Array.from(new Set(findings.map(f).filter((v): v is string => !!v))).sort();
+    const countBy = (f: (x: (typeof findings)[number]) => string | undefined) => {
+      const m = new Map<string, number>();
+      for (const x of findings) {
+        const v = f(x);
+        if (v) m.set(v, (m.get(v) ?? 0) + 1);
+      }
+      return m;
+    };
     return {
-      hosts: uniq((x) => x.host),
-      tools: uniq((x) => x.tool),
-      ports: uniq((x) => x.port),
-      dates: uniq((x) => x.scanDate?.slice(0, 10)),
+      options: {
+        hosts: uniq((x) => x.host),
+        tools: uniq((x) => x.tool),
+        ports: uniq((x) => x.port),
+        dates: uniq((x) => x.scanDate?.slice(0, 10)),
+      },
+      counts: {
+        severity: countBy((x) => x.severity) as Map<string, number>,
+        hosts: countBy((x) => x.host),
+        tools: countBy((x) => x.tool),
+        ports: countBy((x) => x.port),
+      },
     };
   }, [findings]);
 
@@ -92,109 +126,149 @@ export function SlicerPanel() {
     (filters.dateRange ? 1 : 0);
 
   return (
-    <div className="flex h-full flex-col overflow-auto bg-panel">
-      <div className="flex items-center justify-between border-b border-border px-3 py-3">
-        <span className="font-mono text-xs font-semibold uppercase tracking-wider text-text">
-          Slicers
-        </span>
+    <ScrollArea className="h-full">
+      <div className="flex items-center justify-between px-4 py-3.5">
+        <span className="text-sm font-semibold tracking-tight">Filters</span>
         {activeCount > 0 && (
           <button
             onClick={clearFilters}
-            className="flex items-center gap-1 rounded px-1.5 py-0.5 font-mono text-[10px] uppercase text-muted hover:bg-border hover:text-sev-critical focus:outline-none focus-visible:ring-1 focus-visible:ring-accent"
+            className="flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
-            <X size={11} /> clear {activeCount}
+            <X className="h-3 w-3" /> Clear {activeCount}
           </button>
         )}
       </div>
+      <Separator />
 
-      <Section title="Search">
-        <div className="flex items-center gap-2 rounded border border-border px-2 py-1.5 focus-within:border-accent">
-          <Search size={13} className="text-muted" />
+      <Section title="Search" icon={<Search className="h-3.5 w-3.5" />}>
+        <div className="flex items-center gap-2 rounded-lg border border-input bg-card px-2.5 py-1.5 transition-colors focus-within:border-ring focus-within:ring-2 focus-within:ring-ring">
+          <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
           <input
             value={filters.search}
             onChange={(e) => setFilter("search", e.target.value)}
             placeholder="host, finding, CVE…"
-            className="w-full bg-transparent font-mono text-xs text-text outline-none placeholder:text-muted"
+            className="w-full bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
             aria-label="Free-text search"
           />
         </div>
       </Section>
+      <Separator />
 
-      <Section title="Severity" count={filters.severities.length}>
-        <CheckList
-          options={SEVERITIES}
-          selected={filters.severities}
-          onToggle={(v) => toggleArrayFilter("severities", v as never)}
-        />
-        <div className="mt-2 flex flex-wrap gap-1">
+      <Section title="Severity" icon={<ShieldAlert className="h-3.5 w-3.5" />} count={filters.severities.length}>
+        <div className="space-y-0.5">
           {SEVERITIES.map((s) => (
-            <span
+            <CheckRow
               key={s}
-              className="h-1.5 w-6 rounded-full"
-              style={{ background: SEVERITY_COLORS[s] }}
-              title={s}
+              label={s}
+              dot={SEVERITY_HEX[s]}
+              count={counts.severity.get(s) ?? 0}
+              checked={filters.severities.includes(s)}
+              onToggle={() => toggleArrayFilter("severities", s as Severity)}
             />
           ))}
         </div>
       </Section>
+      <Separator />
 
-      <Section title="Tool" count={filters.tools.length}>
-        <CheckList
-          options={options.tools}
-          selected={filters.tools}
-          onToggle={(v) => toggleArrayFilter("tools", v)}
-        />
-      </Section>
-
-      <Section title="Host" count={filters.hosts.length}>
-        <CheckList
-          options={options.hosts}
-          selected={filters.hosts}
-          onToggle={(v) => toggleArrayFilter("hosts", v)}
-        />
-      </Section>
-
-      <Section title="Port" count={filters.ports.length}>
-        <CheckList
-          options={options.ports}
-          selected={filters.ports}
-          onToggle={(v) => toggleArrayFilter("ports", v)}
-        />
-      </Section>
-
-      <Section title="Scan" count={filters.scanIds.length}>
-        <div className="space-y-1">
-          <button
-            onClick={() => setFilter("scanIds", [])}
-            className={`w-full rounded px-2 py-1 text-left font-mono text-xs ${
-              filters.scanIds.length === 0
-                ? "bg-accent/15 text-accent"
-                : "text-text hover:bg-border"
-            }`}
-          >
-            All combined
-          </button>
-          {batches.map((b) => (
-            <button
-              key={b.id}
-              onClick={() =>
-                setFilter("scanIds", filters.scanIds[0] === b.id ? [] : [b.id])
-              }
-              className={`w-full truncate rounded px-2 py-1 text-left font-mono text-xs ${
-                filters.scanIds[0] === b.id
-                  ? "bg-accent/15 text-accent"
-                  : "text-text hover:bg-border"
-              }`}
-              title={b.label}
-            >
-              {b.label}
-              <span className="ml-1 text-muted">({b.findingCount})</span>
-            </button>
-          ))}
+      <Section title="Tool" icon={<Wrench className="h-3.5 w-3.5" />} count={filters.tools.length}>
+        <div className="max-h-44 space-y-0.5 overflow-auto pr-1">
+          {options.tools.length === 0 ? (
+            <p className="px-2 py-1 text-xs text-muted-foreground">No values yet.</p>
+          ) : (
+            options.tools.map((t) => (
+              <CheckRow
+                key={t}
+                label={t}
+                count={counts.tools.get(t) ?? 0}
+                checked={filters.tools.includes(t)}
+                onToggle={() => toggleArrayFilter("tools", t)}
+              />
+            ))
+          )}
         </div>
       </Section>
+      <Separator />
 
-      <Section title="Date range">
+      <Section title="Host" icon={<Server className="h-3.5 w-3.5" />} count={filters.hosts.length}>
+        <div className="max-h-44 space-y-0.5 overflow-auto pr-1">
+          {options.hosts.length === 0 ? (
+            <p className="px-2 py-1 text-xs text-muted-foreground">No values yet.</p>
+          ) : (
+            options.hosts.map((h) => (
+              <CheckRow
+                key={h}
+                label={h}
+                count={counts.hosts.get(h) ?? 0}
+                checked={filters.hosts.includes(h)}
+                onToggle={() => toggleArrayFilter("hosts", h)}
+              />
+            ))
+          )}
+        </div>
+      </Section>
+      <Separator />
+
+      <Section title="Port" icon={<Network className="h-3.5 w-3.5" />} count={filters.ports.length}>
+        <div className="max-h-32 space-y-0.5 overflow-auto pr-1">
+          {options.ports.length === 0 ? (
+            <p className="px-2 py-1 text-xs text-muted-foreground">No values yet.</p>
+          ) : (
+            options.ports.map((p) => (
+              <CheckRow
+                key={p}
+                label={p}
+                count={counts.ports.get(p) ?? 0}
+                checked={filters.ports.includes(p)}
+                onToggle={() => toggleArrayFilter("ports", p)}
+              />
+            ))
+          )}
+        </div>
+      </Section>
+      <Separator />
+
+      <Section title="Scan" icon={<Layers className="h-3.5 w-3.5" />} count={filters.scanIds.length}>
+        <div className="space-y-0.5">
+          <button
+            onClick={() => setFilter("scanIds", [])}
+            className={cn(
+              "flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-sm transition-colors",
+              filters.scanIds.length === 0
+                ? "bg-primary-soft font-medium text-primary"
+                : "text-foreground hover:bg-accent"
+            )}
+          >
+            <span>All combined</span>
+          </button>
+          {batches.map((b) => {
+            const active = filters.scanIds[0] === b.id;
+            return (
+              <button
+                key={b.id}
+                onClick={() =>
+                  setFilter("scanIds", active ? [] : [b.id])
+                }
+                className={cn(
+                  "flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors",
+                  active
+                    ? "bg-primary-soft font-medium text-primary"
+                    : "text-foreground hover:bg-accent"
+                )}
+              >
+                <span className="min-w-0 truncate" title={b.label}>
+                  {b.label}
+                </span>
+                <span className="shrink-0 text-[10px] tabular-nums text-muted-foreground">
+                  {b.findingCount}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </Section>
+      <Separator />
+
+      <Section title="Date range" icon={<CalendarDays className="h-3.5 w-3.5" />}>
         <div className="flex items-center gap-2">
           <input
             type="date"
@@ -202,31 +276,25 @@ export function SlicerPanel() {
             min={options.dates[0]}
             max={options.dates[options.dates.length - 1]}
             onChange={(e) =>
-              setFilter("dateRange", [
-                e.target.value,
-                filters.dateRange?.[1] ?? "",
-              ])
+              setFilter("dateRange", [e.target.value, filters.dateRange?.[1] ?? ""])
             }
-            className="w-full rounded border border-border bg-bg px-2 py-1 font-mono text-xs text-text focus:border-accent focus:outline-none"
+            className="w-full rounded-lg border border-input bg-card px-2.5 py-1.5 text-xs text-foreground shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             aria-label="Start date"
           />
-          <span className="font-mono text-xs text-muted">→</span>
+          <span className="text-muted-foreground">→</span>
           <input
             type="date"
             value={filters.dateRange?.[1] ?? ""}
             min={options.dates[0]}
             max={options.dates[options.dates.length - 1]}
             onChange={(e) =>
-              setFilter("dateRange", [
-                filters.dateRange?.[0] ?? "",
-                e.target.value,
-              ])
+              setFilter("dateRange", [filters.dateRange?.[0] ?? "", e.target.value])
             }
-            className="w-full rounded border border-border bg-bg px-2 py-1 font-mono text-xs text-text focus:border-accent focus:outline-none"
+            className="w-full rounded-lg border border-input bg-card px-2.5 py-1.5 text-xs text-foreground shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             aria-label="End date"
           />
         </div>
       </Section>
-    </div>
+    </ScrollArea>
   );
 }

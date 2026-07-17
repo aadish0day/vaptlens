@@ -1,7 +1,16 @@
 import { useMemo } from "react";
-import { X, Grid2x2, Lock } from "lucide-react";
+import { Grid2x2, Lock } from "lucide-react";
 import { useDashboardStore, uid } from "../store/useDashboardStore";
 import type { WidgetConfig } from "../lib/types";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "./ui/dialog";
+import { Badge } from "./ui/badge";
+import { cn } from "../lib/utils";
 
 interface Template extends Omit<WidgetConfig, "id" | "layout"> {
   desc: string;
@@ -70,9 +79,56 @@ const TEMPLATES: Template[] = [
     desc: "Findings by scan date — needs 2+ dated scans.",
     requiresDated: true,
   },
+  {
+    title: "Severity Heatmap",
+    chartType: "heatmap",
+    groupBy: "host",
+    aggregation: "count",
+    topN: 15,
+    desc: "Per-host severity density — spot the riskiest assets at a glance.",
+  },
+  {
+    title: "Risk Posture Radar",
+    chartType: "radar",
+    groupBy: "tool",
+    colorBy: "severity",
+    aggregation: "count",
+    desc: "Severity footprint per scanning tool.",
+  },
+  {
+    title: "Findings Treemap",
+    chartType: "treemap",
+    groupBy: "host",
+    aggregation: "count",
+    topN: 15,
+    desc: "Hosts sized by total findings.",
+  },
+  {
+    title: "CVSS × Host",
+    chartType: "scatter",
+    groupBy: "host",
+    aggregation: "count",
+    desc: "Every scored finding plotted by CVSS across hosts.",
+  },
+  {
+    title: "Trend (Area)",
+    chartType: "area",
+    groupBy: "scanDate",
+    colorBy: "severity",
+    aggregation: "count",
+    sortBy: "label",
+    desc: "Stacked severity trend — needs 2+ dated scans.",
+    requiresDated: true,
+  },
 ];
 
-export function TemplateGallery({ onClose }: { onClose: () => void }) {
+export function TemplateGallery({
+  open,
+  onOpenChange,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
   const findings = useDashboardStore((s) => s.findings);
   const widgets = useDashboardStore((s) => s.widgets);
   const addWidget = useDashboardStore((s) => s.addWidget);
@@ -99,64 +155,57 @@ export function TemplateGallery({ onClose }: { onClose: () => void }) {
         h: rest.chartType === "kpi" ? 2 : 6,
       },
     });
-    onClose();
+    onOpenChange(false);
   };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
-      onClick={onClose}
-    >
-      <div
-        className="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-lg border border-border bg-panel"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between border-b border-border px-4 py-3">
-          <h2 className="flex items-center gap-2 font-mono text-sm font-semibold uppercase tracking-wider text-text">
-            <Grid2x2 size={15} /> Template Gallery
-          </h2>
-          <button
-            onClick={onClose}
-            className="rounded p-1 text-muted hover:bg-border hover:text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-accent"
-            aria-label="Close"
-          >
-            <X size={16} />
-          </button>
-        </div>
-        <div className="grid grid-cols-1 gap-3 overflow-auto p-4 sm:grid-cols-2">
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Grid2x2 className="h-4 w-4 text-primary" /> Template Gallery
+          </DialogTitle>
+          <DialogDescription>
+            Start from a curated view, then customize it on the canvas.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="grid max-h-[60vh] grid-cols-1 gap-3 overflow-y-auto py-1 sm:grid-cols-2">
           {TEMPLATES.map((t) => {
             const locked = t.requiresDated && datedCount < 2;
             return (
               <button
                 key={t.title}
+                type="button"
                 disabled={locked}
                 onClick={() => add(t)}
-                className={`group rounded-md border border-border bg-bg p-3 text-left transition-colors ${
+                className={cn(
+                  "group rounded-xl border border-border bg-card p-4 text-left shadow-sm transition-all duration-150",
                   locked
                     ? "cursor-not-allowed opacity-50"
-                    : "hover:border-accent focus:outline-none focus-visible:ring-1 focus-visible:ring-accent"
-                }`}
+                    : "hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-pop focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                )}
               >
-                <div className="flex items-center justify-between">
-                  <span className="font-mono text-xs font-semibold text-text">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-sm font-semibold tracking-tight text-foreground">
                     {t.title}
                   </span>
                   {locked ? (
-                    <Lock size={12} className="text-muted" />
+                    <Lock className="h-3.5 w-3.5 text-muted-foreground" />
                   ) : (
-                    <span className="font-mono text-[10px] uppercase text-accent">
+                    <Badge variant="muted" className="uppercase">
                       {t.chartType}
-                    </span>
+                    </Badge>
                   )}
                 </div>
-                <p className="mt-1 font-sans text-[11px] leading-snug text-muted">
+                <p className="mt-1.5 text-[13px] leading-snug text-muted-foreground">
                   {t.desc}
                 </p>
               </button>
             );
           })}
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

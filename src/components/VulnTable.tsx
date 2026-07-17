@@ -1,6 +1,26 @@
 import { Fragment, useMemo, useState } from "react";
-import { ChevronDown, ChevronRight, Search } from "lucide-react";
-import { SEVERITY_COLORS, type Finding } from "../lib/types";
+import {
+  Bug,
+  ChevronDown,
+  ChevronRight,
+  ChevronsUpDown,
+  Gauge,
+  Search,
+  Server,
+  ShieldAlert,
+  Wrench,
+} from "lucide-react";
+import type { Finding } from "../lib/types";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "./ui/table";
+import { SeverityBadge } from "./severity-badge";
+import { cn } from "../lib/utils";
 
 type SortKey = "severity" | "host" | "name" | "cvss" | "tool";
 const SEV_RANK: Record<string, number> = {
@@ -10,6 +30,40 @@ const SEV_RANK: Record<string, number> = {
   Low: 3,
   Info: 4,
 };
+
+function SortHeader({
+  label,
+  icon,
+  active,
+  dir,
+  onClick,
+  className,
+}: {
+  label: string;
+  icon?: React.ReactNode;
+  active: boolean;
+  dir: "asc" | "desc";
+  onClick: () => void;
+  className?: string;
+}) {
+  return (
+    <TableHead className={cn("cursor-pointer select-none", className)} onClick={onClick}>
+      <span className="inline-flex items-center gap-1 hover:text-foreground">
+        {icon && <span className="text-muted-foreground/70">{icon}</span>}
+        {label}
+        {active ? (
+          dir === "asc" ? (
+            <ChevronDown className="h-3.5 w-3.5" />
+          ) : (
+            <ChevronRight className="h-3.5 w-3.5 rotate-90" />
+          )
+        ) : (
+          <ChevronsUpDown className="h-3.5 w-3.5 opacity-50" />
+        )}
+      </span>
+    </TableHead>
+  );
+}
 
 export function VulnTable({ findings }: { findings: Finding[] }) {
   const [query, setQuery] = useState("");
@@ -69,7 +123,7 @@ export function VulnTable({ findings }: { findings: Finding[] }) {
 
   if (findings.length === 0) {
     return (
-      <div className="flex h-full items-center justify-center text-sm text-muted">
+      <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
         No findings match the current filters.
       </div>
     );
@@ -77,110 +131,131 @@ export function VulnTable({ findings }: { findings: Finding[] }) {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center gap-2 border-b border-border px-3 py-2">
-        <Search size={14} className="text-muted" />
-        <input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Filter table…"
-          className="w-full bg-transparent font-mono text-xs text-text outline-none placeholder:text-muted"
-          aria-label="Filter findings table"
-        />
-        <span className="font-mono text-xs text-muted">{rows.length} rows</span>
+      <div className="flex items-center gap-2 border-b border-border px-1 pb-2.5">
+        <div className="flex flex-1 items-center gap-2 rounded-lg border border-input bg-card px-2.5 py-1.5 focus-within:border-ring focus-within:ring-2 focus-within:ring-ring">
+          <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Filter table…"
+            className="w-full bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
+            aria-label="Filter findings table"
+          />
+        </div>
+        <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+          {rows.length} rows
+        </span>
       </div>
+
       <div className="min-h-0 flex-1 overflow-auto">
-        <table className="w-full border-collapse text-left font-mono text-xs">
-          <thead className="sticky top-0 bg-panel">
-            <tr className="text-muted">
-              <th className="w-6 px-2 py-1.5" />
-              <SortHeader label="Sev" active={sortKey === "severity"} dir={sortDir} onClick={() => toggleSort("severity")} />
-              <SortHeader label="Host" active={sortKey === "host"} dir={sortDir} onClick={() => toggleSort("host")} />
-              <SortHeader label="Finding" active={sortKey === "name"} dir={sortDir} onClick={() => toggleSort("name")} />
-              <SortHeader label="CVSS" active={sortKey === "cvss"} dir={sortDir} onClick={() => toggleSort("cvss")} />
-              <SortHeader label="Tool" active={sortKey === "tool"} dir={sortDir} onClick={() => toggleSort("tool")} />
-            </tr>
-          </thead>
-          <tbody>
+        <Table>
+          <TableHeader className="sticky top-0 z-10 bg-card">
+            <TableRow className="hover:bg-transparent">
+              <TableHead className="w-8" />
+              <SortHeader
+                label="Sev"
+                icon={<ShieldAlert className="h-3.5 w-3.5" />}
+                active={sortKey === "severity"}
+                dir={sortDir}
+                onClick={() => toggleSort("severity")}
+              />
+              <SortHeader
+                label="Host"
+                icon={<Server className="h-3.5 w-3.5" />}
+                active={sortKey === "host"}
+                dir={sortDir}
+                onClick={() => toggleSort("host")}
+              />
+              <SortHeader
+                label="Finding"
+                icon={<Bug className="h-3.5 w-3.5" />}
+                active={sortKey === "name"}
+                dir={sortDir}
+                onClick={() => toggleSort("name")}
+              />
+              <SortHeader
+                label="CVSS"
+                icon={<Gauge className="h-3.5 w-3.5" />}
+                active={sortKey === "cvss"}
+                dir={sortDir}
+                onClick={() => toggleSort("cvss")}
+                className="text-right"
+              />
+              <SortHeader
+                label="Tool"
+                icon={<Wrench className="h-3.5 w-3.5" />}
+                active={sortKey === "tool"}
+                dir={sortDir}
+                onClick={() => toggleSort("tool")}
+              />
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {rows.map((f) => {
               const open = expanded.has(f.id);
               return (
                 <Fragment key={f.id}>
-                  <tr
-                    key={f.id}
-                    className="cursor-pointer border-t border-border/60 hover:bg-border/30"
+                  <TableRow
+                    className="cursor-pointer"
                     onClick={() => toggleExpand(f.id)}
                   >
-                    <td className="px-2 py-1.5 text-muted">
-                      {open ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-                    </td>
-                    <td className="px-2 py-1.5">
-                      <span
-                        className="rounded px-1.5 py-0.5 text-[10px] font-semibold"
-                        style={{ color: SEVERITY_COLORS[f.severity], background: `${SEVERITY_COLORS[f.severity]}22` }}
-                      >
-                        {f.severity}
-                      </span>
-                    </td>
-                    <td className="px-2 py-1.5 text-text">{f.host}</td>
-                    <td className="max-w-[280px] truncate px-2 py-1.5 text-text" title={f.name}>
+                    <TableCell className="w-8 text-muted-foreground">
+                      {open ? (
+                        <ChevronDown className="h-4 w-4" />
+                      ) : (
+                        <ChevronRight className="h-4 w-4" />
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <SeverityBadge severity={f.severity} />
+                    </TableCell>
+                    <TableCell className="font-medium text-foreground">
+                      {f.host}
+                    </TableCell>
+                    <TableCell className="max-w-[320px] truncate text-foreground" title={f.name}>
                       {f.name}
-                    </td>
-                    <td className="px-2 py-1.5 text-muted">{f.cvss ?? "—"}</td>
-                    <td className="px-2 py-1.5 text-muted">{f.tool}</td>
-                  </tr>
+                    </TableCell>
+                    <TableCell className="text-right font-mono text-xs tabular-nums text-muted-foreground">
+                      {f.cvss ?? "—"}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">{f.tool}</TableCell>
+                  </TableRow>
                   {open && (
-                    <tr key={`${f.id}-detail`} className="border-t border-border/60 bg-bg/40">
-                      <td />
-                      <td colSpan={5} className="px-4 py-3 font-sans text-xs leading-relaxed text-muted">
-                        {f.description && (
-                          <p className="mb-2">
-                            <span className="font-mono text-accent">desc: </span>
-                            {f.description}
-                          </p>
-                        )}
-                        {f.solution && (
-                          <p className="mb-2">
-                            <span className="font-mono text-accent">fix: </span>
-                            {f.solution}
-                          </p>
-                        )}
-                        {f.cve && f.cve.length > 0 && (
-                          <p className="font-mono">
-                            <span className="text-accent">cve: </span>
-                            {f.cve.join(", ")}
-                          </p>
-                        )}
-                      </td>
-                    </tr>
+                    <TableRow className="hover:bg-transparent">
+                      <TableCell />
+                      <TableCell colSpan={5} className="bg-accent/30 px-4 py-3">
+                        <div className="space-y-1.5 text-sm">
+                          {f.description && (
+                            <p className="text-muted-foreground">
+                              <span className="font-semibold text-foreground">
+                                Description:{" "}
+                              </span>
+                              {f.description}
+                            </p>
+                          )}
+                          {f.solution && (
+                            <p className="text-muted-foreground">
+                              <span className="font-semibold text-foreground">
+                                Remediation:{" "}
+                              </span>
+                              {f.solution}
+                            </p>
+                          )}
+                          {f.cve && f.cve.length > 0 && (
+                            <p className="font-mono text-xs text-primary">
+                              {f.cve.join(", ")}
+                            </p>
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
                   )}
                 </Fragment>
               );
             })}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       </div>
     </div>
-  );
-}
-
-function SortHeader({
-  label,
-  active,
-  dir,
-  onClick,
-}: {
-  label: string;
-  active: boolean;
-  dir: "asc" | "desc";
-  onClick: () => void;
-}) {
-  return (
-    <th
-      className={`cursor-pointer px-2 py-1.5 font-semibold select-none ${active ? "text-accent" : ""}`}
-      onClick={onClick}
-    >
-      {label}
-      {active ? (dir === "asc" ? " ▲" : " ▼") : ""}
-    </th>
   );
 }

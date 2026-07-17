@@ -1,11 +1,19 @@
 import { useCallback, useRef, useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import Papa from "papaparse";
-import { Upload, FileText, CheckCircle2, AlertTriangle, Pencil } from "lucide-react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  FileText,
+  Pencil,
+  UploadCloud,
+} from "lucide-react";
 import { useDashboardStore, uid } from "../store/useDashboardStore";
 import { detectTool } from "../lib/presets";
 import { parseCsv } from "../lib/parseCsv";
 import type { ScanBatch } from "../lib/types";
 import { ColumnMapper } from "./ColumnMapper";
+import { cn } from "../lib/utils";
 
 function readFile(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -86,7 +94,7 @@ export function UploadZone() {
 
   return (
     <div className="space-y-3">
-      <div
+      <motion.div
         onDragOver={(e) => {
           e.preventDefault();
           setDragOver(true);
@@ -98,15 +106,34 @@ export function UploadZone() {
           if (e.dataTransfer.files.length) handleFiles(e.dataTransfer.files);
         }}
         onClick={() => inputRef.current?.click()}
-        className={`flex cursor-pointer flex-col items-center justify-center rounded-md border border-dashed px-4 py-6 text-center transition-colors ${
-          dragOver ? "border-accent bg-accent/5" : "border-border hover:border-muted"
-        }`}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            inputRef.current?.click();
+          }
+        }}
+        className={cn(
+          "group flex cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed px-4 py-7 text-center transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+          dragOver
+            ? "border-primary bg-primary-soft"
+            : "border-border bg-card hover:border-primary/50 hover:bg-accent/40"
+        )}
       >
-        <Upload size={18} className="mb-1 text-muted" />
-        <p className="font-mono text-xs text-text">
-          Drop CSVs here or <span className="text-accent">browse</span>
+        <div
+          className={cn(
+            "mb-2 grid h-10 w-10 place-items-center rounded-full transition-colors",
+            dragOver ? "bg-primary text-primary-foreground" : "bg-accent text-primary"
+          )}
+        >
+          <UploadCloud className="h-5 w-5" />
+        </div>
+        <p className="text-sm font-medium text-foreground">
+          Drop CSVs here or{" "}
+          <span className="text-primary">browse</span>
         </p>
-        <p className="mt-1 font-mono text-[10px] text-muted">
+        <p className="mt-1 text-[11px] text-muted-foreground">
           Nessus · OpenVAS · Qualys · Burp · ZAP · Nikto · generic
         </p>
         <input
@@ -114,42 +141,64 @@ export function UploadZone() {
           type="file"
           accept=".csv"
           multiple
-          className="hidden"
+          className="sr-only"
           onChange={(e) => e.target.files && handleFiles(e.target.files)}
         />
-      </div>
+      </motion.div>
 
-      {error && (
-        <div className="flex items-start gap-2 rounded border border-sev-high/40 bg-sev-high/10 px-3 py-2 font-mono text-[11px] text-sev-high">
-          <AlertTriangle size={13} className="mt-0.5 shrink-0" />
-          <span>{error}</span>
+      {batches.length === 0 && (
+        <div className="text-center py-1">
+          <button
+            type="button"
+            onClick={useDashboardStore.getState().loadSampleData}
+            className="text-[11px] font-medium text-muted-foreground hover:text-primary transition-colors underline cursor-pointer"
+          >
+            Or load sample scan data
+          </button>
         </div>
       )}
 
+      <AnimatePresence>
+        {error && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            className="flex items-start gap-2 overflow-hidden rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-[11px] text-destructive"
+          >
+            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            <span>{error}</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {batches.length > 0 && (
-        <div className="space-y-1">
-          <div className="flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-wider text-muted">
-            <CheckCircle2 size={12} className="text-accent" />
-            {batches.length} scan {batches.length === 1 ? "batch" : "batches"} ·{" "}
-            {findings.length} findings
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-1.5 px-0.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+            <CheckCircle2 className="h-3.5 w-3.5 text-success" />
+            {batches.length} {batches.length === 1 ? "batch" : "batches"} ·{" "}
+            {findings.length.toLocaleString()} findings
           </div>
           <ul className="space-y-1">
             {batches.map((b) => (
               <li
                 key={b.id}
-                className="flex items-center gap-2 rounded border border-border bg-bg px-2 py-1"
+                className="group flex items-center gap-2 rounded-lg border border-border bg-card px-2.5 py-1.5 shadow-sm transition-colors hover:border-primary/40"
               >
-                <FileText size={12} className="shrink-0 text-muted" />
+                <FileText className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                 <input
                   value={b.label}
                   onChange={(e) => updateBatch(b.id, e.target.value)}
-                  className="min-w-0 flex-1 bg-transparent font-mono text-xs text-text outline-none"
+                  className="min-w-0 flex-1 rounded bg-transparent px-1 py-0.5 text-xs font-medium text-foreground outline-none focus:bg-accent"
                   aria-label={`Rename ${b.label}`}
                 />
-                <span className="shrink-0 font-mono text-[10px] text-muted">
-                  {b.tool} · {b.findingCount}
+                <span className="shrink-0 rounded-full bg-secondary px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                  {b.tool}
                 </span>
-                <Pencil size={11} className="shrink-0 text-muted" />
+                <span className="shrink-0 text-[10px] tabular-nums text-muted-foreground">
+                  {b.findingCount}
+                </span>
+                <Pencil className="h-3 w-3 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
               </li>
             ))}
           </ul>

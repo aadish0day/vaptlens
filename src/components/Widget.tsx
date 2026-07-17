@@ -1,15 +1,43 @@
 import { useMemo } from "react";
-import { X } from "lucide-react";
+import { motion } from "framer-motion";
+import { GripVertical, X } from "lucide-react";
 import { aggregate } from "../lib/aggregate";
 import type { Finding, WidgetConfig } from "../lib/types";
 import { useDashboardStore } from "../store/useDashboardStore";
 import { BarChartWidget } from "./charts/BarChart";
+import { AreaChartWidget } from "./charts/AreaChart";
 import { DonutChartWidget } from "./charts/DonutChart";
 import { LineChartWidget } from "./charts/LineChart";
+import { RadarChartWidget } from "./charts/RadarChart";
+import { TreemapWidget } from "./charts/Treemap";
+import { HeatmapWidget } from "./charts/Heatmap";
+import { ScatterChartWidget } from "./charts/ScatterChart";
 import { HistogramWidget } from "./charts/Histogram";
 import { KpiCardWidget } from "./charts/KpiCard";
 import type { ChartProps } from "./charts/types";
 import { VulnTable } from "./VulnTable";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "./ui/tooltip";
+
+const chartMap: Record<
+  WidgetConfig["chartType"],
+  (p: ChartProps) => React.ReactNode
+> = {
+  bar: (p) => <BarChartWidget {...p} />,
+  area: (p) => <AreaChartWidget {...p} />,
+  histogram: (p) => <HistogramWidget {...p} />,
+  donut: (p) => <DonutChartWidget {...p} />,
+  line: (p) => <LineChartWidget {...p} />,
+  radar: (p) => <RadarChartWidget {...p} />,
+  treemap: (p) => <TreemapWidget {...p} />,
+  heatmap: (p) => <HeatmapWidget {...p} />,
+  scatter: (p) => <ScatterChartWidget {...p} />,
+  kpi: (p) => <KpiCardWidget {...p} />,
+  table: (p) => <VulnTable findings={p.filtered} />,
+};
 
 export function Widget({
   widget,
@@ -22,12 +50,17 @@ export function Widget({
   const removeWidget = useDashboardStore((s) => s.removeWidget);
   const crossFilters = useDashboardStore((s) => s.filters.crossFilters);
 
+  const render = (chartMap as Record<
+    string,
+    ((p: ChartProps) => React.ReactNode) | undefined
+  >)[widget.chartType];
+
   const data = useMemo(
     () =>
-      widget.chartType === "table" || widget.chartType === "kpi"
-        ? null
-        : aggregate(filtered, widget),
-    [filtered, widget]
+      render && widget.chartType !== "table" && widget.chartType !== "kpi"
+        ? aggregate(filtered, widget)
+        : null,
+    [filtered, widget, render]
   );
 
   const onSelect = (field: import("../lib/types").FieldKey, value: string) => {
@@ -42,44 +75,45 @@ export function Widget({
     activeCrossFilters: crossFilters,
   };
 
-  let body: React.ReactNode;
-  switch (widget.chartType) {
-    case "bar":
-      body = <BarChartWidget {...chartProps} />;
-      break;
-    case "histogram":
-      body = <HistogramWidget {...chartProps} />;
-      break;
-    case "donut":
-      body = <DonutChartWidget {...chartProps} />;
-      break;
-    case "line":
-      body = <LineChartWidget {...chartProps} />;
-      break;
-    case "kpi":
-      body = <KpiCardWidget {...chartProps} />;
-      break;
-    case "table":
-      body = <VulnTable findings={filtered} />;
-      break;
-  }
+  const body = render ? (
+    render(chartProps)
+  ) : (
+    <div className="flex h-full items-center justify-center p-4 text-center text-xs text-muted-foreground">
+      Unknown chart type “{String(widget.chartType)}”. Remove this widget to
+      dismiss.
+    </div>
+  );
 
   return (
-    <div className="flex h-full flex-col overflow-hidden rounded-md border border-border bg-panel">
-      <div className="widget-drag flex cursor-move items-center justify-between border-b border-border px-3 py-2">
-        <h3 className="truncate font-mono text-xs font-semibold uppercase tracking-wide text-text">
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+      data-testid="widget"
+      className="widget-shell flex h-full flex-col overflow-hidden rounded-xl border border-border bg-card shadow-card"
+    >
+      <div className="widget-drag flex cursor-grab items-center gap-2 border-b border-border px-3 py-2 active:cursor-grabbing">
+        <GripVertical className="h-4 w-4 shrink-0 text-muted-foreground/60" />
+        <h3
+          data-testid="widget-title"
+          className="min-w-0 flex-1 truncate text-[13px] font-semibold tracking-tight text-foreground"
+        >
           {widget.title}
         </h3>
-        <button
-          onClick={() => removeWidget(widget.id)}
-          className="rounded p-1 text-muted transition-colors hover:bg-border hover:text-sev-critical focus:outline-none focus-visible:ring-1 focus-visible:ring-accent"
-          aria-label={`Remove ${widget.title} widget`}
-          title="Remove widget"
-        >
-          <X size={14} />
-        </button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              onClick={() => removeWidget(widget.id)}
+              className="widget-cancel rounded-md p-1 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              aria-label={`Remove ${widget.title} widget`}
+            >
+              <X className="pointer-events-none h-4 w-4" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent>Remove widget</TooltipContent>
+        </Tooltip>
       </div>
-      <div className="min-h-0 flex-1 p-2">{body}</div>
-    </div>
+      <div className="min-h-0 flex-1 p-3">{body}</div>
+    </motion.div>
   );
 }

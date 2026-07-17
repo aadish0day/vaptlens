@@ -1,14 +1,38 @@
 import { useMemo, useState } from "react";
-import { X, Plus } from "lucide-react";
+import { Plus } from "lucide-react";
 import { useDashboardStore, uid } from "../store/useDashboardStore";
 import { applyFilters } from "../lib/aggregate";
 import type { Aggregation, ChartType, FieldKey, WidgetConfig } from "../lib/types";
 import { Widget } from "./Widget";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "./ui/dialog";
+import { Button } from "./ui/button";
+import { Input } from "./ui/input";
+import { Label } from "./ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "./ui/select";
+import { cn } from "../lib/utils";
 
 const CHART_TYPES: { value: ChartType; label: string }[] = [
   { value: "bar", label: "Bar" },
+  { value: "area", label: "Area" },
   { value: "donut", label: "Donut" },
   { value: "line", label: "Line" },
+  { value: "radar", label: "Radar" },
+  { value: "treemap", label: "Treemap" },
+  { value: "heatmap", label: "Heatmap" },
+  { value: "scatter", label: "Scatter" },
   { value: "histogram", label: "Histogram" },
   { value: "table", label: "Table" },
   { value: "kpi", label: "KPI" },
@@ -36,7 +60,13 @@ const AGG_OPTIONS: { value: Aggregation; label: string }[] = [
   { value: "distinctFindings", label: "Distinct findings" },
 ];
 
-export function WidgetBuilder({ onClose }: { onClose: () => void }) {
+export function WidgetBuilder({
+  open,
+  onOpenChange,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
   const findings = useDashboardStore((s) => s.findings);
   const filters = useDashboardStore((s) => s.filters);
   const widgets = useDashboardStore((s) => s.widgets);
@@ -60,7 +90,13 @@ export function WidgetBuilder({ onClose }: { onClose: () => void }) {
     colorBy: colorBy || undefined,
     aggregation,
     sortBy,
-    topN: chartType === "bar" || chartType === "histogram" ? topN : undefined,
+    topN:
+      chartType === "bar" ||
+      chartType === "histogram" ||
+      chartType === "treemap" ||
+      chartType === "heatmap"
+        ? topN
+        : undefined,
     layout: { x: 0, y: 0, w: 6, h: 6 },
   };
 
@@ -69,130 +105,177 @@ export function WidgetBuilder({ onClose }: { onClose: () => void }) {
     addWidget({
       ...previewWidget,
       id: uid(),
-      layout: { x: 0, y: maxY, w: chartType === "kpi" ? 3 : 6, h: chartType === "kpi" ? 2 : 6 },
+      layout: {
+        x: 0,
+        y: maxY,
+        w: chartType === "kpi" ? 3 : 6,
+        h: chartType === "kpi" ? 2 : 6,
+      },
     });
-    onClose();
+    onOpenChange(false);
   };
 
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
-      onClick={onClose}
-    >
-      <div
-        className="flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-lg border border-border bg-panel"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between border-b border-border px-4 py-3">
-          <h2 className="font-mono text-sm font-semibold uppercase tracking-wider text-text">
-            Add Widget
-          </h2>
-          <button
-            onClick={onClose}
-            className="rounded p-1 text-muted hover:bg-border hover:text-text focus:outline-none focus-visible:ring-1 focus-visible:ring-accent"
-            aria-label="Close"
-          >
-            <X size={16} />
-          </button>
-        </div>
+  const NO_MEASURE = ["kpi", "table", "heatmap", "scatter"];
+  const showAgg = !NO_MEASURE.includes(chartType);
+  const showSplit = ["bar", "area", "donut", "line", "radar", "treemap"].includes(
+    chartType
+  );
+  const showTopN = [
+    "bar",
+    "histogram",
+    "table",
+    "treemap",
+    "heatmap",
+  ].includes(chartType);
+  const showSort = ["bar", "histogram"].includes(chartType);
 
-        <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-auto p-4 md:grid-cols-2">
-          <div className="space-y-3">
-            <Field label="Title">
-              <input
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-3xl">
+        <DialogHeader>
+          <DialogTitle>Add Widget</DialogTitle>
+          <DialogDescription>
+            Configure a visualization, then drop it onto your canvas.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="grid min-h-0 grid-cols-1 gap-6 overflow-y-auto py-1 md:grid-cols-2">
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="widget-title">Title</Label>
+              <Input
+                id="widget-title"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                className="w-full rounded border border-border bg-bg px-2 py-1.5 font-mono text-xs text-text focus:border-accent focus:outline-none"
               />
-            </Field>
+            </div>
 
-            <Field label="Chart type">
+            <div className="space-y-1.5">
+              <Label>Chart type</Label>
               <div className="flex flex-wrap gap-1.5">
                 {CHART_TYPES.map((c) => (
                   <button
                     key={c.value}
+                    type="button"
                     onClick={() => setChartType(c.value)}
-                    className={`rounded border px-2 py-1 font-mono text-xs ${
+                    className={cn(
+                      "rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors",
                       chartType === c.value
-                        ? "border-accent bg-accent/15 text-accent"
-                        : "border-border text-muted hover:text-text"
-                    }`}
+                        ? "border-primary bg-primary-soft text-primary"
+                        : "border-border bg-card text-muted-foreground hover:bg-accent hover:text-foreground"
+                    )}
                   >
                     {c.label}
                   </button>
                 ))}
               </div>
-            </Field>
+            </div>
 
-            <Field label="Group by (X / category)">
-              <Select
-                value={groupBy}
-                onChange={(v) => setGroupBy(v as FieldKey)}
-                options={FIELD_OPTIONS}
-              />
-            </Field>
+            <div className="space-y-1.5">
+              <Label>Group by (category)</Label>
+              <Select value={groupBy} onValueChange={(v) => setGroupBy(v as FieldKey)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {FIELD_OPTIONS.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>
+                      {o.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
 
-            {chartType !== "kpi" && chartType !== "table" && (
-              <Field label="Aggregation (Y / measure)">
+            {showAgg && (
+              <div className="space-y-1.5">
+                <Label>Aggregation (measure)</Label>
                 <Select
                   value={aggregation}
-                  onChange={(v) => setAggregation(v as Aggregation)}
-                  options={AGG_OPTIONS}
-                />
-              </Field>
+                  onValueChange={(v) => setAggregation(v as Aggregation)}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {AGG_OPTIONS.map((o) => (
+                      <SelectItem key={o.value} value={o.value}>
+                        {o.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             )}
 
-            {chartType !== "kpi" && chartType !== "table" && (
-              <Field label="Color / split by (optional)">
+            {showSplit && (
+              <div className="space-y-1.5">
+                <Label>Split / color by (optional)</Label>
                 <Select
-                  value={colorBy}
-                  onChange={(v) => setColorBy(v as FieldKey | "")}
-                  options={[{ value: "", label: "— none —" }, ...FIELD_OPTIONS]}
-                />
-              </Field>
+                  value={colorBy || "__none"}
+                  onValueChange={(v) => setColorBy(v === "__none" ? "" : (v as FieldKey))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="— none —" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none">— none —</SelectItem>
+                    {FIELD_OPTIONS.map((o) => (
+                      <SelectItem key={o.value} value={o.value}>
+                        {o.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             )}
 
-            {(chartType === "bar" || chartType === "histogram" || chartType === "table") && (
-              <Field label="Top N">
-                <input
-                  type="number"
-                  min={0}
-                  value={topN}
-                  onChange={(e) => setTopN(Number(e.target.value) || 0)}
-                  className="w-24 rounded border border-border bg-bg px-2 py-1.5 font-mono text-xs text-text focus:border-accent focus:outline-none"
-                />
-                <span className="ml-2 font-mono text-[11px] text-muted">0 = all</span>
-              </Field>
+            {showTopN && (
+              <div className="space-y-1.5">
+                <Label htmlFor="topn">Top N</Label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    id="topn"
+                    type="number"
+                    min={0}
+                    value={topN}
+                    onChange={(e) => setTopN(Number(e.target.value) || 0)}
+                    className="w-24"
+                  />
+                  <span className="text-xs text-muted-foreground">0 = all</span>
+                </div>
+              </div>
             )}
 
-            {chartType !== "kpi" && chartType !== "table" && (
-              <Field label="Sort by">
+            {showSort && (
+              <div className="space-y-1.5">
+                <Label>Sort by</Label>
                 <div className="flex gap-1.5">
                   {(["value", "label"] as const).map((s) => (
                     <button
                       key={s}
+                      type="button"
                       onClick={() => setSortBy(s)}
-                      className={`rounded border px-2 py-1 font-mono text-xs ${
+                      className={cn(
+                        "rounded-lg border px-3 py-1.5 text-xs font-medium capitalize transition-colors",
                         sortBy === s
-                          ? "border-accent bg-accent/15 text-accent"
-                          : "border-border text-muted hover:text-text"
-                      }`}
+                          ? "border-primary bg-primary-soft text-primary"
+                          : "border-border bg-card text-muted-foreground hover:bg-accent hover:text-foreground"
+                      )}
                     >
                       {s}
                     </button>
                   ))}
                 </div>
-              </Field>
+              </div>
             )}
           </div>
 
           <div className="flex flex-col">
-            <span className="mb-2 font-mono text-[11px] uppercase tracking-wider text-muted">
-              Live preview
-            </span>
-            <div className="min-h-[320px] flex-1 rounded border border-border bg-bg p-2">
+            <Label className="mb-2">Live preview</Label>
+            <div className="min-h-[340px] flex-1 rounded-xl border border-border bg-background p-3">
               {filtered.length === 0 ? (
-                <div className="flex h-full items-center justify-center font-mono text-xs text-muted">
+                <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
                   Upload data to preview.
                 </div>
               ) : (
@@ -202,56 +285,15 @@ export function WidgetBuilder({ onClose }: { onClose: () => void }) {
           </div>
         </div>
 
-        <div className="flex justify-end gap-2 border-t border-border px-4 py-3">
-          <button
-            onClick={onClose}
-            className="rounded px-3 py-1.5 font-mono text-xs text-muted hover:text-text"
-          >
+        <DialogFooter>
+          <Button variant="ghost" onClick={() => onOpenChange(false)}>
             Cancel
-          </button>
-          <button
-            onClick={handleAdd}
-            className="flex items-center gap-1.5 rounded bg-accent px-3 py-1.5 font-mono text-xs font-semibold text-bg hover:bg-accent/85 focus:outline-none focus-visible:ring-1 focus-visible:ring-accent"
-          >
-            <Plus size={14} /> Add to canvas
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <label className="mb-1 block font-mono text-[11px] uppercase tracking-wider text-muted">
-        {label}
-      </label>
-      {children}
-    </div>
-  );
-}
-
-function Select({
-  value,
-  onChange,
-  options,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  options: { value: string; label: string }[];
-}) {
-  return (
-    <select
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      className="w-full rounded border border-border bg-bg px-2 py-1.5 font-mono text-xs text-text focus:border-accent focus:outline-none"
-    >
-      {options.map((o) => (
-        <option key={o.value} value={o.value}>
-          {o.label}
-        </option>
-      ))}
-    </select>
+          </Button>
+          <Button onClick={handleAdd}>
+            <Plus className="h-4 w-4" /> Add to canvas
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

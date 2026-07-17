@@ -2,6 +2,7 @@ import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import GridLayout, { type Layout } from "react-grid-layout";
 import "react-grid-layout/css/styles.css";
 import "react-resizable/css/styles.css";
+import { LayoutDashboard } from "lucide-react";
 import { useDashboardStore } from "../store/useDashboardStore";
 import { applyFilters } from "../lib/aggregate";
 import { Widget } from "./Widget";
@@ -49,25 +50,32 @@ export function DashboardCanvas() {
 
   if (widgets.length === 0) {
     return (
-      <div className="flex h-full items-center justify-center rounded-md border border-dashed border-border p-10 text-center">
-        <p className="font-mono text-sm text-muted">
-          No widgets yet. Use <span className="text-accent">+ Add Widget</span> or a
-          template from the gallery to build your canvas.
+      <div className="flex h-full min-h-[60vh] flex-col items-center justify-center rounded-2xl border border-dashed border-border bg-card/40 text-center">
+        <div className="grid h-12 w-12 place-items-center rounded-xl bg-accent text-primary">
+          <LayoutDashboard className="h-6 w-6" />
+        </div>
+          <h3 className="mt-4 text-base font-semibold tracking-tight">
+          Your canvas is empty
+        </h3>
+        <p className="mt-1 max-w-xs text-sm text-muted-foreground">
+          Upload a scan CSV, then add a widget or start from a template to
+          visualize your findings.
         </p>
       </div>
     );
   }
 
   return (
-    <div ref={containerRef} className="w-full">
+    <div ref={containerRef} id="dashboard-capture" className="w-full">
       <GridLayout
         className="layout"
         layout={items.map((it) => it.layout)}
         cols={cols}
         width={width || 1200}
         rowHeight={36}
-        margin={[12, 12]}
+        margin={[16, 16]}
         draggableHandle=".widget-drag"
+        draggableCancel=".widget-cancel"
         onLayoutChange={handleLayoutChange}
         compactType="vertical"
         resizeHandles={["se"]}

@@ -9,6 +9,7 @@ import type {
   WidgetConfig,
 } from "../lib/types";
 import { loadLayout, loadMappings, saveLayout, saveMappings } from "../lib/storage";
+import { generateSampleData } from "../lib/sampleData";
 
 function uid(prefix = "w"): string {
   return `${prefix}_${Math.random().toString(36).slice(2, 9)}`;
@@ -35,15 +36,6 @@ export function defaultWidgets(): WidgetConfig[] {
     },
     {
       id: uid(),
-      title: "Findings by Tool",
-      chartType: "bar",
-      groupBy: "tool",
-      colorBy: "severity",
-      aggregation: "count",
-      layout: { x: 6, y: 0, w: 6, h: 4 },
-    },
-    {
-      id: uid(),
       title: "Top 10 Vulnerable Hosts",
       chartType: "bar",
       groupBy: "host",
@@ -51,7 +43,29 @@ export function defaultWidgets(): WidgetConfig[] {
       aggregation: "count",
       sortBy: "value",
       topN: 10,
+      layout: { x: 6, y: 0, w: 6, h: 4 },
+    },
+    {
+      id: uid(),
+      title: "Trend Over Time",
+      chartType: "line",
+      groupBy: "scanDate",
+      colorBy: "severity",
+      aggregation: "count",
+      sortBy: "label",
+      topN: 15,
       layout: { x: 0, y: 4, w: 6, h: 4 },
+    },
+    {
+      id: uid(),
+      title: "Trend (Area)",
+      chartType: "area",
+      groupBy: "scanDate",
+      colorBy: "severity",
+      aggregation: "count",
+      sortBy: "label",
+      topN: 15,
+      layout: { x: 6, y: 4, w: 6, h: 4 },
     },
     {
       id: uid(),
@@ -59,7 +73,42 @@ export function defaultWidgets(): WidgetConfig[] {
       chartType: "histogram",
       groupBy: "cvssBucket",
       aggregation: "count",
-      layout: { x: 6, y: 4, w: 6, h: 4 },
+      layout: { x: 0, y: 8, w: 4, h: 4 },
+    },
+    {
+      id: uid(),
+      title: "Risk Posture Radar",
+      chartType: "radar",
+      groupBy: "tool",
+      colorBy: "severity",
+      aggregation: "count",
+      layout: { x: 4, y: 8, w: 4, h: 4 },
+    },
+    {
+      id: uid(),
+      title: "Findings Treemap",
+      chartType: "treemap",
+      groupBy: "host",
+      aggregation: "count",
+      topN: 15,
+      layout: { x: 8, y: 8, w: 4, h: 4 },
+    },
+    {
+      id: uid(),
+      title: "Severity Heatmap",
+      chartType: "heatmap",
+      groupBy: "host",
+      aggregation: "count",
+      topN: 15,
+      layout: { x: 0, y: 12, w: 6, h: 5 },
+    },
+    {
+      id: uid(),
+      title: "CVSS × Host",
+      chartType: "scatter",
+      groupBy: "host",
+      aggregation: "count",
+      layout: { x: 6, y: 12, w: 6, h: 5 },
     },
     {
       id: uid(),
@@ -67,7 +116,7 @@ export function defaultWidgets(): WidgetConfig[] {
       chartType: "table",
       groupBy: "name",
       aggregation: "count",
-      layout: { x: 0, y: 8, w: 12, h: 6 },
+      layout: { x: 0, y: 17, w: 12, h: 6 },
     },
   ];
 }
@@ -120,6 +169,8 @@ interface DashboardState {
   setLayout: (layouts: { i: string; x: number; y: number; w: number; h: number }[]) => void;
 
   saveMapping: (mapping: SavedMapping) => void;
+  loadSampleData: () => void;
+  clearAllData: () => void;
 }
 
 export const useDashboardStore = create<DashboardState>((set) => ({
@@ -261,6 +312,24 @@ export const useDashboardStore = create<DashboardState>((set) => ({
       }
       saveMappings(mappings);
       return { mappings };
+    }),
+
+  loadSampleData: () =>
+    set((s) => {
+      const { findings, batches } = generateSampleData();
+      return {
+        findings,
+        batches,
+        filters: initialFilters,
+        scanline: s.scanline + 1,
+      };
+    }),
+
+  clearAllData: () =>
+    set({
+      findings: [],
+      batches: [],
+      filters: initialFilters,
     }),
 }));
 

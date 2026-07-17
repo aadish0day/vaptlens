@@ -1,17 +1,18 @@
 import {
-  CartesianGrid,
-  Line,
-  LineChart,
+  PolarAngleAxis,
+  PolarGrid,
+  PolarRadiusAxis,
+  Radar,
+  RadarChart,
   ResponsiveContainer,
   Tooltip,
-  XAxis,
-  YAxis,
+  Legend,
 } from "recharts";
 import type { ChartProps } from "./types";
 import { useChartTheme, seriesColor, primaryColor } from "../../lib/chart-theme";
 import { useTheme } from "../theme-provider";
 
-export function LineChartWidget({ widget, data, onSelect }: ChartProps) {
+export function RadarChartWidget({ widget, data, onSelect }: ChartProps) {
   const { theme } = useTheme();
   const dark = theme === "dark";
   const chart = useChartTheme();
@@ -25,35 +26,21 @@ export function LineChartWidget({ widget, data, onSelect }: ChartProps) {
     onSelect(widget.groupBy, key);
   };
 
-  const axisTick = {
-    fill: chart.axis,
-    fontSize: 11,
-    fontFamily: "Inter, sans-serif",
-  };
-
   return (
     <ResponsiveContainer width="100%" height="100%">
-      <LineChart
-        data={data.pivot}
-        margin={{ top: 8, right: 12, bottom: 4, left: 0 }}
-        onClick={handleClick}
-      >
-        <CartesianGrid stroke={chart.grid} vertical={false} />
-        <XAxis
+      <RadarChart data={data.pivot} onClick={handleClick} outerRadius="72%">
+        <PolarGrid stroke={chart.grid} />
+        <PolarAngleAxis
           dataKey="key"
-          tick={axisTick}
-          stroke={chart.grid}
-          tickLine={false}
+          tick={{ fill: chart.axis, fontSize: 11, fontFamily: "Inter, sans-serif" }}
         />
-        <YAxis
-          tick={axisTick}
-          stroke={chart.grid}
+        <PolarRadiusAxis
+          tick={{ fill: chart.axis, fontSize: 10 }}
+          axisLine={false}
           tickLine={false}
-          allowDecimals={false}
-          width={36}
+          stroke={chart.grid}
         />
         <Tooltip
-          cursor={{ stroke: chart.crosshair, strokeWidth: 1 }}
           contentStyle={{
             background: chart.tooltipBg,
             border: `1px solid ${chart.tooltipBorder}`,
@@ -67,28 +54,40 @@ export function LineChartWidget({ widget, data, onSelect }: ChartProps) {
           itemStyle={{ color: chart.tooltipText }}
         />
         {series.length > 0 ? (
-          series.map((s) => (
-            <Line
-              key={s}
-              type="monotone"
-              dataKey={s}
-              stroke={seriesColor(s, series.indexOf(s), dark)}
-              strokeWidth={2}
-              dot={{ r: 2.5, strokeWidth: 0 }}
-              activeDot={{ r: 4.5 }}
-            />
-          ))
+          series.map((s) => {
+            const c = seriesColor(s, series.indexOf(s), dark);
+            return (
+              <Radar
+                key={s}
+                name={s}
+                dataKey={s}
+                stroke={c}
+                fill={c}
+                fillOpacity={0.18}
+                strokeWidth={2}
+              />
+            );
+          })
         ) : (
-          <Line
-            type="monotone"
+          <Radar
+            name="value"
             dataKey="value"
             stroke={primaryColor(dark)}
+            fill={primaryColor(dark)}
+            fillOpacity={0.2}
             strokeWidth={2}
-            dot={{ r: 2.5, strokeWidth: 0 }}
-            activeDot={{ r: 4.5 }}
           />
         )}
-      </LineChart>
+        {series.length > 1 && (
+          <Legend
+            wrapperStyle={{
+              fontFamily: "Inter, sans-serif",
+              fontSize: 11,
+              color: chart.axis,
+            }}
+          />
+        )}
+      </RadarChart>
     </ResponsiveContainer>
   );
 }

@@ -1,13 +1,19 @@
-import { Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
+import { Cell, Label, Legend, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 import type { ChartProps } from "./types";
-import { colorForName } from "../../lib/colors";
+import { useChartTheme, seriesColor } from "../../lib/chart-theme";
+import { useTheme } from "../theme-provider";
 
 export function DonutChartWidget({ widget, data, onSelect }: ChartProps) {
+  const { theme } = useTheme();
+  const dark = theme === "dark";
+  const chart = useChartTheme();
   const series = data.series;
+
   const rows = data.pivot.map((p) => ({
     name: String(p.key),
     value: Number(p.value) || 0,
   }));
+  const total = rows.reduce((sum, r) => sum + r.value, 0);
 
   const orderedNames = series.length
     ? series
@@ -20,30 +26,42 @@ export function DonutChartWidget({ widget, data, onSelect }: ChartProps) {
           data={rows}
           dataKey="value"
           nameKey="name"
-          innerRadius="55%"
-          outerRadius="80%"
+          innerRadius="58%"
+          outerRadius="82%"
           paddingAngle={2}
-          stroke="#0B0E14"
+          stroke="transparent"
           onClick={(e: { name?: string } | null) => {
             if (e && e.name) onSelect(widget.groupBy, e.name);
           }}
         >
           {rows.map((r) => (
-            <Cell key={r.name} fill={colorForName(r.name, orderedNames)} />
+            <Cell key={r.name} fill={seriesColor(r.name, orderedNames.indexOf(r.name), dark)} />
           ))}
+          <Label
+            value={total.toLocaleString()}
+            position="center"
+            fill={chart.tooltipText}
+            style={{ fontSize: 22, fontWeight: 600, fontFamily: "Inter, sans-serif" }}
+          />
         </Pie>
         <Tooltip
           contentStyle={{
-            background: "#0B0E14",
-            border: "1px solid #212B3D",
-            borderRadius: 6,
-            fontFamily: "IBM Plex Mono",
+            background: chart.tooltipBg,
+            border: `1px solid ${chart.tooltipBorder}`,
+            borderRadius: 10,
+            fontFamily: "Inter, sans-serif",
             fontSize: 12,
+            boxShadow:
+              "0 8px 24px -6px rgb(16 24 40 / 0.18), 0 2px 6px -2px rgb(16 24 40 / 0.12)",
           }}
-          itemStyle={{ color: "#E6EDF3" }}
+          itemStyle={{ color: chart.tooltipText }}
         />
         <Legend
-          wrapperStyle={{ fontFamily: "IBM Plex Mono", fontSize: 11, color: "#7D8CA3" }}
+          wrapperStyle={{
+            fontFamily: "Inter, sans-serif",
+            fontSize: 11,
+            color: chart.axis,
+          }}
         />
       </PieChart>
     </ResponsiveContainer>

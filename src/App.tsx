@@ -1,122 +1,192 @@
-import { useEffect, useState } from "react";
-import { Plus, LayoutGrid, PanelLeft, ShieldAlert, X } from "lucide-react";
+import { useState } from "react";
+import { motion } from "framer-motion";
+import {
+  LayoutDashboard,
+  LayoutGrid,
+  Lock,
+  Moon,
+  PanelLeft,
+  Plus,
+  ShieldCheck,
+  Sun,
+  Trash2,
+} from "lucide-react";
 import { useDashboardStore } from "./store/useDashboardStore";
 import { UploadZone } from "./components/UploadZone";
 import { SlicerPanel } from "./components/SlicerPanel";
 import { FilterChips } from "./components/FilterChips";
 import { DashboardCanvas } from "./components/DashboardCanvas";
+import { Onboarding } from "./components/Onboarding";
 import { WidgetBuilder } from "./components/WidgetBuilder";
 import { TemplateGallery } from "./components/TemplateGallery";
+import { ExportMenu } from "./components/ExportMenu";
+import { Button } from "./components/ui/button";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+} from "./components/ui/sheet";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "./components/ui/tooltip";
+import { useTheme } from "./components/theme-provider";
+
+function ThemeToggle() {
+  const { theme, toggleTheme } = useTheme();
+  const isDark = theme === "dark";
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={toggleTheme}
+          aria-label="Toggle color theme"
+          data-testid="theme-toggle"
+        >
+          {isDark ? <Sun className="h-[18px] w-[18px]" /> : <Moon className="h-[18px] w-[18px]" />}
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>{isDark ? "Switch to light" : "Switch to dark"}</TooltipContent>
+    </Tooltip>
+  );
+}
+
+function SidebarContent() {
+  return (
+    <div className="flex h-full flex-col">
+      <div className="border-b border-border px-5 py-4">
+        <UploadZone />
+      </div>
+      <div className="min-h-0 flex-1 overflow-hidden">
+        <SlicerPanel />
+      </div>
+    </div>
+  );
+}
 
 export default function App() {
-  const scanline = useDashboardStore((s) => s.scanline);
-  const [showBuilder, setShowBuilder] = useState(false);
-  const [showGallery, setShowGallery] = useState(false);
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  const [sweep, setSweep] = useState(false);
+  const findingsCount = useDashboardStore((s) => s.findings.length);
+  const batchesCount = useDashboardStore((s) => s.batches.length);
+  const clearAllData = useDashboardStore((s) => s.clearAllData);
 
-  useEffect(() => {
-    if (scanline === 0) return;
-    setSweep(true);
-    const t = setTimeout(() => setSweep(false), 1700);
-    return () => clearTimeout(t);
-  }, [scanline]);
+  const [builderOpen, setBuilderOpen] = useState(false);
+  const [galleryOpen, setGalleryOpen] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
-    <div className="flex h-screen flex-col bg-bg text-text">
-      {/* Terminal / report banner header */}
-      <header className="relative flex items-center justify-between border-b border-border bg-panel px-4 py-3">
-        {sweep && (
-          <div
-            className="pointer-events-none absolute inset-x-0 top-0 h-12 animate-scanline bg-gradient-to-b from-accent/30 to-transparent"
-            aria-hidden
-          />
-        )}
-        <div className="flex items-center gap-3">
-          <ShieldAlert size={18} className="text-accent" />
-          <div className="font-mono text-sm">
-            <span className="text-muted">root@vaptlens</span>
-            <span className="text-accent">:~$</span>{" "}
-            <span className="font-semibold tracking-wide text-text">vaptlens</span>
-            <span className="text-muted"> — vulnerability scan analytics</span>
+    <div className="flex h-screen flex-col overflow-hidden bg-background text-foreground">
+      <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-border bg-card/80 px-4 backdrop-blur supports-[backdrop-filter]:bg-card/70">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="md:hidden"
+          onClick={() => setMobileOpen(true)}
+          aria-label="Open filters"
+        >
+          <PanelLeft className="h-[18px] w-[18px]" />
+        </Button>
+
+        <div className="flex items-center gap-2.5">
+          <div className="grid h-8 w-8 place-items-center rounded-lg bg-gradient-to-br from-primary to-[#8B5CF6] text-white shadow-sm">
+            <ShieldCheck className="h-[18px] w-[18px]" />
+          </div>
+          <div className="leading-tight">
+            <div className="text-sm font-semibold tracking-tight">VAPTLens</div>
+            <div className="hidden text-[11px] text-muted-foreground sm:block">
+              Vulnerability scan analytics
+            </div>
           </div>
         </div>
-        <div className="hidden font-mono text-[11px] text-muted sm:block">
-          client-side · no data leaves this browser
+
+        <div className="ml-auto flex items-center gap-2">
+          <span className="hidden items-center gap-1.5 rounded-full border border-border bg-card px-2.5 py-1 text-[11px] font-medium text-muted-foreground lg:flex">
+            <Lock className="h-3 w-3" />
+            Client-side · nothing leaves this browser
+          </span>
+          <ThemeToggle />
         </div>
       </header>
 
       <div className="flex min-h-0 flex-1">
-        {/* Sidebar (desktop) / drawer (mobile) */}
-        <aside
-          className={`${
-            drawerOpen ? "translate-x-0" : "-translate-x-full"
-          } fixed inset-y-0 left-0 z-40 w-72 shrink-0 transform border-r border-border bg-panel transition-transform md:static md:translate-x-0`}
-        >
-          <div className="flex h-full flex-col overflow-auto">
-            <div className="border-b border-border p-3">
-              <UploadZone />
-            </div>
-            <div className="min-h-0 flex-1">
-              <SlicerPanel />
-            </div>
-          </div>
-          {/* Close button on mobile */}
-          <button
-            onClick={() => setDrawerOpen(false)}
-            className="absolute right-2 top-2 rounded p-1 text-muted hover:text-text md:hidden"
-            aria-label="Close panel"
-          >
-            <X size={16} />
-          </button>
+        <aside className="hidden w-80 shrink-0 flex-col border-r border-border bg-sidebar md:flex">
+          <SidebarContent />
         </aside>
 
-        {drawerOpen && (
-          <div
-            className="fixed inset-0 z-30 bg-black/50 md:hidden"
-            onClick={() => setDrawerOpen(false)}
-          />
-        )}
+        <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
+          <SheetContent side="left" className="w-[340px] p-0">
+            <SheetHeader>
+              <SheetTitle>Filters &amp; data</SheetTitle>
+              <SheetDescription>
+                Upload a scan and slice the results.
+              </SheetDescription>
+            </SheetHeader>
+            <div className="min-h-0 flex-1">
+              <SidebarContent />
+            </div>
+          </SheetContent>
+        </Sheet>
 
-        {/* Main canvas area */}
         <main className="flex min-w-0 flex-1 flex-col">
-          <div className="flex items-center gap-2 border-b border-border bg-panel px-3 py-2">
-            <button
-              onClick={() => setDrawerOpen(true)}
-              className="rounded p-1.5 text-muted hover:bg-border hover:text-text md:hidden"
-              aria-label="Open filters"
-            >
-              <PanelLeft size={16} />
-            </button>
-            <span className="font-mono text-[11px] uppercase tracking-wider text-muted">
-              Canvas
-            </span>
+          <div className="flex items-center gap-3 border-b border-border bg-card/60 px-4 py-2.5 backdrop-blur">
+            <div className="min-w-0">
+              <h1 className="flex items-center gap-1.5 text-sm font-semibold tracking-tight">
+                <LayoutDashboard className="h-4 w-4 text-primary" />
+                Dashboard
+              </h1>
+              <p className="truncate text-xs text-muted-foreground">
+                {findingsCount.toLocaleString()} findings across {batchesCount}{" "}
+                {batchesCount === 1 ? "scan" : "scans"}
+              </p>
+            </div>
             <div className="ml-auto flex items-center gap-2">
-              <button
-                onClick={() => setShowGallery(true)}
-                className="flex items-center gap-1.5 rounded border border-border px-2.5 py-1.5 font-mono text-xs text-muted hover:border-accent hover:text-accent focus:outline-none focus-visible:ring-1 focus-visible:ring-accent"
+              {findingsCount > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={clearAllData}
+                  className="text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  <span className="hidden lg:inline">Clear Data</span>
+                </Button>
+              )}
+              <ExportMenu disabled={findingsCount === 0} />
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setGalleryOpen(true)}
+                disabled={findingsCount === 0}
               >
-                <LayoutGrid size={13} /> Templates
-              </button>
-              <button
-                onClick={() => setShowBuilder(true)}
-                className="flex items-center gap-1.5 rounded bg-accent px-2.5 py-1.5 font-mono text-xs font-semibold text-bg hover:bg-accent/85 focus:outline-none focus-visible:ring-1 focus-visible:ring-accent"
-              >
-                <Plus size={13} /> Add Widget
-              </button>
+                <LayoutGrid className="h-4 w-4" />
+                <span className="hidden sm:inline">Templates</span>
+              </Button>
+              <Button size="sm" onClick={() => setBuilderOpen(true)} disabled={findingsCount === 0}>
+                <Plus className="h-4 w-4" />
+                <span className="hidden sm:inline">Add Widget</span>
+              </Button>
             </div>
           </div>
 
           <FilterChips />
 
-          <div className="min-h-0 flex-1 overflow-auto p-3">
-            <DashboardCanvas />
-          </div>
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+            className="min-h-0 flex-1 overflow-auto p-4 md:p-6"
+          >
+            {findingsCount === 0 ? <Onboarding /> : <DashboardCanvas />}
+          </motion.div>
         </main>
       </div>
 
-      {showBuilder && <WidgetBuilder onClose={() => setShowBuilder(false)} />}
-      {showGallery && <TemplateGallery onClose={() => setShowGallery(false)} />}
+      <WidgetBuilder open={builderOpen} onOpenChange={setBuilderOpen} />
+      <TemplateGallery open={galleryOpen} onOpenChange={setGalleryOpen} />
     </div>
   );
 }
