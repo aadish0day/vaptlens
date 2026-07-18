@@ -78,7 +78,7 @@ export function BarChartWidget({ widget, data, onSelect }: ChartProps) {
             <Bar
               key={s}
               dataKey={s}
-              stackId="a"
+              stackId={widget.barLayout === "grouped" ? undefined : "a"}
               fill={seriesColor(s, series.indexOf(s), dark)}
               radius={[4, 4, 0, 0]}
             />

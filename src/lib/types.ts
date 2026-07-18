@@ -34,6 +34,18 @@ export interface Finding {
   scanLabel: string;
   scanDate?: string;
   tool: string;
+  url?: string;
+
+  // Computed fields
+  lifecycle?: "New" | "Open" | "Fixed";
+  slaStatus?: "Met" | "Breached";
+  isExploitable?: "Exploitable" | "Not Exploitable";
+  isEol?: "EOL/Obsolete" | "Supported";
+  isZeroDay?: "Zero-day" | "Known";
+  unpatchedAge?: "Unpatched > 6 Months" | "Unpatched < 6 Months";
+  owaspCategory?: string;
+  agingBucket?: string;
+  subnet?: string;
 }
 
 export interface ScanBatch {
@@ -55,7 +67,18 @@ export type FieldKey =
   | "pluginId"
   | "name"
   | "cvssBucket"
-  | "scanDate";
+  | "scanDate"
+  | "lifecycle"
+  | "slaStatus"
+  | "isExploitable"
+  | "isEol"
+  | "isZeroDay"
+  | "unpatchedAge"
+  | "url"
+  | "scanMonth"
+  | "owaspCategory"
+  | "agingBucket"
+  | "subnet";
 
 export type Aggregation =
   | "count"
@@ -90,6 +113,17 @@ export const FIELD_KEYS: FieldKey[] = [
   "name",
   "cvssBucket",
   "scanDate",
+  "lifecycle",
+  "slaStatus",
+  "isExploitable",
+  "isEol",
+  "isZeroDay",
+  "unpatchedAge",
+  "url",
+  "scanMonth",
+  "owaspCategory",
+  "agingBucket",
+  "subnet",
 ];
 
 export const AGGREGATIONS: Aggregation[] = [
@@ -134,6 +168,7 @@ export interface WidgetConfig {
   aggregation: Aggregation;
   sortBy?: "value" | "label";
   topN?: number;
+  barLayout?: "stacked" | "grouped";
   layout: { x: number; y: number; w: number; h: number };
 }
 
@@ -160,6 +195,7 @@ export interface ColumnMapping {
   solution?: string;
   pluginId?: string;
   scanDate?: string;
+  url?: string;
 }
 
 export interface SavedMapping extends ColumnMapping {

@@ -9,10 +9,16 @@ export function DonutChartWidget({ widget, data, onSelect }: ChartProps) {
   const chart = useChartTheme();
   const series = data.series;
 
-  const rows = data.pivot.map((p) => ({
-    name: String(p.key),
-    value: Number(p.value) || 0,
-  }));
+  const rows = data.pivot.map((p) => {
+    let value = Number(p.value) || 0;
+    if (widget.colorBy && data.series.length > 0) {
+      value = data.series.reduce((sum, s) => sum + (Number(p[s]) || 0), 0);
+    }
+    return {
+      name: String(p.key),
+      value,
+    };
+  });
   const total = rows.reduce((sum, r) => sum + r.value, 0);
 
   const orderedNames = series.length

@@ -72,6 +72,7 @@ export function parseCsv(
     const scanDate = mapping.scanDate
       ? (row[mapping.scanDate]?.trim() || undefined)
       : undefined;
+    const url = mapping.url ? (row[mapping.url]?.trim() || undefined) : undefined;
 
     findings.push({
       id: `${batch.id}-${i}`,
@@ -93,6 +94,7 @@ export function parseCsv(
       scanLabel: batch.label,
       scanDate,
       tool: batch.tool,
+      url,
     });
   });
 

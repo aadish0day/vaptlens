@@ -49,3 +49,25 @@ export function saveMappings(mappings: SavedMapping[]): void {
     /* ignore */
   }
 }
+
+const STATUSES_KEY = "vaptlens.remediation.v1";
+
+export function loadRemediationStatuses(): Record<string, "todo" | "in_progress" | "in_review" | "done"> {
+  try {
+    const raw = localStorage.getItem(STATUSES_KEY);
+    if (!raw) return {};
+    return JSON.parse(raw) as Record<string, "todo" | "in_progress" | "in_review" | "done">;
+  } catch {
+    return {};
+  }
+}
+
+export function saveRemediationStatuses(
+  statuses: Record<string, "todo" | "in_progress" | "in_review" | "done">
+): void {
+  try {
+    localStorage.setItem(STATUSES_KEY, JSON.stringify(statuses));
+  } catch {
+    /* ignore */
+  }
+}

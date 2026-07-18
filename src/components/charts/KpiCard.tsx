@@ -52,7 +52,7 @@ export function KpiCardWidget({ widget, filtered, onSelect, activeCrossFilters }
     return filtered;
   }, [filtered, matchingValue, widget.groupBy]);
 
-  const value = aggregateGlobal(cardFindings, widget.aggregation);
+  const value = aggregateGlobal(cardFindings, widget.aggregation, widget.groupBy);
 
   const formatted =
     widget.aggregation === "avgCvss" || widget.aggregation === "maxCvss"
@@ -60,12 +60,41 @@ export function KpiCardWidget({ widget, filtered, onSelect, activeCrossFilters }
       : value.toLocaleString();
 
   const isSeverityKpi = widget.groupBy === "severity" && widget.topN === undefined;
-  const color =
-    isSeverityKpi && SEVERITIES.includes(widget.title as never)
-      ? SEVERITY_HEX[widget.title as keyof typeof SEVERITY_HEX]
-      : dark
-        ? "#E7EAF0"
-        : "#14181F";
+  const color = useMemo(() => {
+    if (isSeverityKpi && SEVERITIES.includes(widget.title as never)) {
+      return SEVERITY_HEX[widget.title as keyof typeof SEVERITY_HEX];
+    }
+    if (widget.groupBy === "slaStatus") {
+      return widget.title === "Breached" ? "#E5484D" : "#46A758";
+    }
+    if (widget.groupBy === "lifecycle") {
+      if (widget.title === "Fixed") return "#46A758";
+      if (widget.title === "New") return "#818CF8";
+      return "#F2994A";
+    }
+    if (widget.groupBy === "isExploitable") {
+      return widget.title === "Exploitable" ? "#F2994A" : dark ? "#98A2B3" : "#6B7280";
+    }
+    if (widget.groupBy === "isZeroDay") {
+      return widget.title === "Zero-day" ? "#E5484D" : dark ? "#98A2B3" : "#6B7280";
+    }
+    if (widget.groupBy === "isEol") {
+      return widget.title === "EOL/Obsolete" ? "#F2994A" : dark ? "#98A2B3" : "#6B7280";
+    }
+    if (widget.groupBy === "unpatchedAge") {
+      return widget.title === "Unpatched > 6 Months" ? "#F2994A" : dark ? "#98A2B3" : "#6B7280";
+    }
+    if (widget.groupBy === "agingBucket") {
+      if (widget.title === "0–30 Days" || widget.title === "Remediated") return "#46A758";
+      if (widget.title === "31–90 Days") return "#818CF8";
+      if (widget.title === "91–180 Days") return "#F2994A";
+      if (widget.title === "180+ Days") return "#E5484D";
+    }
+    if (widget.groupBy === "owaspCategory") {
+      return "#8B5CF6";
+    }
+    return dark ? "#E7EAF0" : "#14181F";
+  }, [widget.groupBy, widget.title, isSeverityKpi, dark]);
 
   const isFilterActive = useMemo(() => {
     if (!matchingValue || !widget.groupBy) return false;

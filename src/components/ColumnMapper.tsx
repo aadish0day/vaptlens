@@ -22,6 +22,7 @@ const TARGET_FIELDS: { key: keyof ColumnMapping; label: string; required?: boole
   { key: "severity", label: "Severity" },
   { key: "cvss", label: "CVSS" },
   { key: "name", label: "Finding name" },
+  { key: "url", label: "URL" },
   { key: "cve", label: "CVE / CWE" },
   { key: "port", label: "Port" },
   { key: "protocol", label: "Protocol" },

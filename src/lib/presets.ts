@@ -150,7 +150,7 @@ const FUZZ_TOKENS: { token: string; field: keyof ColumnMapping }[] = [
   { token: "ip", field: "host" },
   { token: "hostname", field: "host" },
   { token: "target", field: "host" },
-  { token: "url", field: "host" },
+  { token: "url", field: "url" },
   { token: "port", field: "port" },
   { token: "protocol", field: "protocol" },
   { token: "sev", field: "severity" },
@@ -186,6 +186,9 @@ export function guessMapping(headers: string[]): ColumnMapping {
         break;
       }
     }
+  }
+  if (!mapping["host"] && mapping["url"]) {
+    mapping["host"] = mapping["url"];
   }
   return mapping;
 }

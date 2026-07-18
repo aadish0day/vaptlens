@@ -22,7 +22,20 @@ import {
 import { SeverityBadge } from "./severity-badge";
 import { cn } from "../lib/utils";
 
-type SortKey = "severity" | "host" | "name" | "cvss" | "tool";
+type SortKey = "severity" | "host" | "name" | "cvss" | "tool" | "lifecycle" | "slaStatus";
+
+function StatusBadge({ status }: { status: "New" | "Open" | "Fixed" }) {
+  const styles = {
+    New: "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20",
+    Open: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20",
+    Fixed: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20",
+  };
+  return (
+    <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium border uppercase tracking-wider", styles[status])}>
+      {status}
+    </span>
+  );
+}
 const SEV_RANK: Record<string, number> = {
   Critical: 0,
   High: 1,
@@ -98,6 +111,12 @@ export function VulnTable({ findings }: { findings: Finding[] }) {
         case "tool":
           cmp = a.tool.localeCompare(b.tool);
           break;
+        case "lifecycle":
+          cmp = (a.lifecycle ?? "New").localeCompare(b.lifecycle ?? "New");
+          break;
+        case "slaStatus":
+          cmp = (a.slaStatus ?? "Met").localeCompare(b.slaStatus ?? "Met");
+          break;
       }
       return sortDir === "asc" ? cmp : -cmp;
     });
@@ -167,6 +186,12 @@ export function VulnTable({ findings }: { findings: Finding[] }) {
                 onClick={() => toggleSort("host")}
               />
               <SortHeader
+                label="Status"
+                active={sortKey === "lifecycle"}
+                dir={sortDir}
+                onClick={() => toggleSort("lifecycle")}
+              />
+              <SortHeader
                 label="Finding"
                 icon={<Bug className="h-3.5 w-3.5" />}
                 active={sortKey === "name"}
@@ -209,11 +234,38 @@ export function VulnTable({ findings }: { findings: Finding[] }) {
                     <TableCell>
                       <SeverityBadge severity={f.severity} />
                     </TableCell>
-                    <TableCell className="font-medium text-foreground">
+                     <TableCell className="font-medium text-foreground">
                       {f.host}
                     </TableCell>
-                    <TableCell className="max-w-[320px] truncate text-foreground" title={f.name}>
-                      {f.name}
+                    <TableCell>
+                      <StatusBadge status={f.lifecycle ?? "New"} />
+                    </TableCell>
+                    <TableCell className="max-w-[400px] text-foreground" title={f.name}>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className={cn(f.lifecycle === "Fixed" && "line-through text-muted-foreground")}>
+                          {f.name}
+                        </span>
+                        {f.isZeroDay === "Zero-day" && (
+                          <span className="shrink-0 rounded bg-purple-500/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-purple-600 dark:text-purple-400 border border-purple-500/20">
+                            Zero-day
+                          </span>
+                        )}
+                        {f.isExploitable === "Exploitable" && (
+                          <span className="shrink-0 rounded bg-red-500/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-red-600 dark:text-red-400 border border-red-500/20">
+                            Exploit
+                          </span>
+                        )}
+                        {f.isEol === "EOL/Obsolete" && (
+                          <span className="shrink-0 rounded bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                            EOL
+                          </span>
+                        )}
+                        {f.slaStatus === "Breached" && (
+                          <span className="shrink-0 rounded bg-rose-500/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-rose-600 dark:text-rose-400 border border-rose-500/20">
+                            SLA Breached
+                          </span>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell className="text-right font-mono text-xs tabular-nums text-muted-foreground">
                       {f.cvss ?? "—"}
@@ -223,7 +275,7 @@ export function VulnTable({ findings }: { findings: Finding[] }) {
                   {open && (
                     <TableRow className="hover:bg-transparent">
                       <TableCell />
-                      <TableCell colSpan={5} className="bg-accent/30 px-4 py-3">
+                      <TableCell colSpan={6} className="bg-accent/30 px-4 py-3">
                         <div className="space-y-1.5 text-sm">
                           {f.description && (
                             <p className="text-muted-foreground">
@@ -239,6 +291,21 @@ export function VulnTable({ findings }: { findings: Finding[] }) {
                                 Remediation:{" "}
                               </span>
                               {f.solution}
+                            </p>
+                          )}
+                          {f.url && (
+                            <p className="text-muted-foreground break-all">
+                              <span className="font-semibold text-foreground">
+                                URL:{" "}
+                              </span>
+                              <a
+                                href={f.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-primary hover:underline font-mono text-xs"
+                              >
+                                {f.url}
+                              </a>
                             </p>
                           )}
                           {f.cve && f.cve.length > 0 && (

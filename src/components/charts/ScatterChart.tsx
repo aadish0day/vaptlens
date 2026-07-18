@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import {
   CartesianGrid,
   ResponsiveContainer,
@@ -10,18 +11,51 @@ import {
   Legend,
 } from "recharts";
 import type { ChartProps } from "./types";
-import { useChartTheme, SEVERITIES, SEVERITY_HEX } from "../../lib/chart-theme";
+import { useChartTheme, SEVERITY_HEX, seriesColor } from "../../lib/chart-theme";
+import { getFieldValue } from "../../lib/aggregate";
+import { useTheme } from "../theme-provider";
+import type { Severity } from "../../lib/types";
 
-export function ScatterChartWidget({ filtered, onSelect }: ChartProps) {
+export function ScatterChartWidget({ widget, filtered, onSelect }: ChartProps) {
+  const { theme } = useTheme();
+  const dark = theme === "dark";
   const chart = useChartTheme();
 
-  const points = SEVERITIES.map((s) => ({
-    name: s,
-    color: SEVERITY_HEX[s],
-    data: filtered
-      .filter((f) => f.severity === s && typeof f.cvss === "number")
-      .map((f) => ({ x: f.cvss as number, y: f.host, severity: s })),
-  }));
+  const yField = widget.groupBy || "host";
+  const colorField = widget.colorBy || "severity";
+
+  // Get all unique values for colorField
+  const seriesNames = useMemo(() => {
+    const set = new Set(
+      filtered.map((f) => String(getFieldValue(f, colorField) ?? "Unknown"))
+    );
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [filtered, colorField]);
+
+  const points = useMemo(() => {
+    return seriesNames.map((s, idx) => {
+      const data = filtered
+        .filter(
+          (f) =>
+            String(getFieldValue(f, colorField) ?? "Unknown") === s &&
+            typeof f.cvss === "number"
+        )
+        .map((f) => ({
+          x: f.cvss as number,
+          y: String(getFieldValue(f, yField) ?? "Unknown"),
+          seriesVal: s,
+          finding: f,
+        }));
+      return {
+        name: s,
+        color:
+          colorField === "severity" && s in SEVERITY_HEX
+            ? SEVERITY_HEX[s as Severity]
+            : seriesColor(s, idx, dark),
+        data,
+      };
+    });
+  }, [filtered, yField, colorField, seriesNames, dark]);
 
   const hasData = points.some((p) => p.data.length > 0);
 
@@ -32,6 +66,9 @@ export function ScatterChartWidget({ filtered, onSelect }: ChartProps) {
       </div>
     );
   }
+
+  // Get dynamic Y-axis label
+  const yAxisLabel = widget.groupBy === "host" ? "Host" : String(widget.groupBy);
 
   return (
     <ResponsiveContainer width="100%" height="100%">
@@ -56,7 +93,7 @@ export function ScatterChartWidget({ filtered, onSelect }: ChartProps) {
         <YAxis
           type="category"
           dataKey="y"
-          name="Host"
+          name={yAxisLabel}
           width={92}
           tick={{ fill: chart.axis, fontSize: 11, fontFamily: "Inter, sans-serif" }}
           stroke={chart.grid}
@@ -76,10 +113,11 @@ export function ScatterChartWidget({ filtered, onSelect }: ChartProps) {
           }}
           labelStyle={{ color: chart.tooltipText, fontWeight: 600 }}
           itemStyle={{ color: chart.tooltipText }}
-          formatter={(value: unknown, _name: string, item: { payload?: { y?: string; severity?: string } }) => [
-            `CVSS ${value} · ${item.payload?.severity}`,
-            item.payload?.y ?? "",
-          ]}
+          formatter={(
+            value: unknown,
+            _name: string,
+            item: { payload?: { y?: string; seriesVal?: string } }
+          ) => [`CVSS ${value} · ${item.payload?.seriesVal}`, item.payload?.y ?? ""]}
         />
         <Legend
           wrapperStyle={{
@@ -96,7 +134,7 @@ export function ScatterChartWidget({ filtered, onSelect }: ChartProps) {
             fill={p.color}
             fillOpacity={0.75}
             onClick={(e: { y?: string } | null) => {
-              if (e?.y) onSelect("host", e.y);
+              if (e?.y) onSelect(widget.groupBy, e.y);
             }}
           />
         ))}

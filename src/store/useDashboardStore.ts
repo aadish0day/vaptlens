@@ -8,8 +8,9 @@ import type {
   Severity,
   WidgetConfig,
 } from "../lib/types";
-import { loadLayout, loadMappings, saveLayout, saveMappings } from "../lib/storage";
+import { loadLayout, loadMappings, saveLayout, saveMappings, loadRemediationStatuses, saveRemediationStatuses } from "../lib/storage";
 import { generateSampleData } from "../lib/sampleData";
+import { enrichFindings } from "../lib/aggregate";
 
 function uid(prefix = "w"): string {
   return `${prefix}_${Math.random().toString(36).slice(2, 9)}`;
@@ -23,7 +24,47 @@ export function defaultWidgets(): WidgetConfig[] {
       chartType: "kpi",
       groupBy: "severity",
       aggregation: "count",
-      layout: { x: 0, y: 0, w: 3, h: 2 },
+      layout: { x: 0, y: 0, w: 2, h: 2 },
+    },
+    {
+      id: uid(),
+      title: "Zero-day",
+      chartType: "kpi",
+      groupBy: "isZeroDay",
+      aggregation: "count",
+      layout: { x: 2, y: 0, w: 2, h: 2 },
+    },
+    {
+      id: uid(),
+      title: "Exploitable",
+      chartType: "kpi",
+      groupBy: "isExploitable",
+      aggregation: "count",
+      layout: { x: 4, y: 0, w: 2, h: 2 },
+    },
+    {
+      id: uid(),
+      title: "Breached",
+      chartType: "kpi",
+      groupBy: "slaStatus",
+      aggregation: "count",
+      layout: { x: 6, y: 0, w: 2, h: 2 },
+    },
+    {
+      id: uid(),
+      title: "EOL/Obsolete",
+      chartType: "kpi",
+      groupBy: "isEol",
+      aggregation: "count",
+      layout: { x: 8, y: 0, w: 2, h: 2 },
+    },
+    {
+      id: uid(),
+      title: "Unpatched > 6 Months",
+      chartType: "kpi",
+      groupBy: "unpatchedAge",
+      aggregation: "count",
+      layout: { x: 10, y: 0, w: 2, h: 2 },
     },
     {
       id: uid(),
@@ -32,40 +73,47 @@ export function defaultWidgets(): WidgetConfig[] {
       groupBy: "severity",
       aggregation: "count",
       sortBy: "label",
-      layout: { x: 3, y: 0, w: 3, h: 4 },
+      layout: { x: 0, y: 2, w: 4, h: 4 },
     },
     {
       id: uid(),
-      title: "Top 10 Vulnerable Hosts",
+      title: "SLA Compliance",
+      chartType: "donut",
+      groupBy: "slaStatus",
+      aggregation: "count",
+      sortBy: "label",
+      layout: { x: 4, y: 2, w: 4, h: 4 },
+    },
+    {
+      id: uid(),
+      title: "Vulnerability Lifecycle",
+      chartType: "donut",
+      groupBy: "lifecycle",
+      aggregation: "count",
+      sortBy: "label",
+      layout: { x: 8, y: 2, w: 4, h: 4 },
+    },
+    {
+      id: uid(),
+      title: "Top 10 IPs",
       chartType: "bar",
       groupBy: "host",
       colorBy: "severity",
       aggregation: "count",
       sortBy: "value",
       topN: 10,
-      layout: { x: 6, y: 0, w: 6, h: 4 },
+      layout: { x: 0, y: 6, w: 6, h: 4 },
     },
     {
       id: uid(),
       title: "Trend Over Time",
       chartType: "line",
-      groupBy: "scanDate",
+      groupBy: "scanMonth",
       colorBy: "severity",
       aggregation: "count",
       sortBy: "label",
       topN: 15,
-      layout: { x: 0, y: 4, w: 6, h: 4 },
-    },
-    {
-      id: uid(),
-      title: "Trend (Area)",
-      chartType: "area",
-      groupBy: "scanDate",
-      colorBy: "severity",
-      aggregation: "count",
-      sortBy: "label",
-      topN: 15,
-      layout: { x: 6, y: 4, w: 6, h: 4 },
+      layout: { x: 6, y: 6, w: 6, h: 4 },
     },
     {
       id: uid(),
@@ -73,42 +121,18 @@ export function defaultWidgets(): WidgetConfig[] {
       chartType: "histogram",
       groupBy: "cvssBucket",
       aggregation: "count",
-      layout: { x: 0, y: 8, w: 4, h: 4 },
+      layout: { x: 0, y: 10, w: 6, h: 4 },
     },
     {
       id: uid(),
-      title: "Risk Posture Radar",
-      chartType: "radar",
-      groupBy: "tool",
+      title: "Trend (Area)",
+      chartType: "area",
+      groupBy: "scanMonth",
       colorBy: "severity",
       aggregation: "count",
-      layout: { x: 4, y: 8, w: 4, h: 4 },
-    },
-    {
-      id: uid(),
-      title: "Findings Treemap",
-      chartType: "treemap",
-      groupBy: "host",
-      aggregation: "count",
+      sortBy: "label",
       topN: 15,
-      layout: { x: 8, y: 8, w: 4, h: 4 },
-    },
-    {
-      id: uid(),
-      title: "Severity Heatmap",
-      chartType: "heatmap",
-      groupBy: "host",
-      aggregation: "count",
-      topN: 15,
-      layout: { x: 0, y: 12, w: 6, h: 5 },
-    },
-    {
-      id: uid(),
-      title: "CVSS × Host",
-      chartType: "scatter",
-      groupBy: "host",
-      aggregation: "count",
-      layout: { x: 6, y: 12, w: 6, h: 5 },
+      layout: { x: 6, y: 10, w: 6, h: 4 },
     },
     {
       id: uid(),
@@ -116,7 +140,7 @@ export function defaultWidgets(): WidgetConfig[] {
       chartType: "table",
       groupBy: "name",
       aggregation: "count",
-      layout: { x: 0, y: 17, w: 12, h: 6 },
+      layout: { x: 0, y: 14, w: 12, h: 6 },
     },
   ];
 }
@@ -171,6 +195,8 @@ interface DashboardState {
   saveMapping: (mapping: SavedMapping) => void;
   loadSampleData: () => void;
   clearAllData: () => void;
+  remediationStatuses: Record<string, "todo" | "in_progress" | "in_review" | "done">;
+  updateRemediationStatus: (id: string, status: "todo" | "in_progress" | "in_review" | "done") => void;
 }
 
 export const useDashboardStore = create<DashboardState>((set) => ({
@@ -181,14 +207,23 @@ export const useDashboardStore = create<DashboardState>((set) => ({
   mappings: loadMappings(),
   scanline: 0,
   pendingUpload: null,
+  remediationStatuses: loadRemediationStatuses(),
+  updateRemediationStatus: (id, status) =>
+    set((s) => {
+      const next = { ...s.remediationStatuses, [id]: status };
+      saveRemediationStatuses(next);
+      return { remediationStatuses: next };
+    }),
 
   addBatch: (findings, batch) =>
     set((s) => {
+      const nextBatches = [...s.batches, batch];
+      const nextFindings = enrichFindings([...s.findings, ...findings], nextBatches);
       const nextWidgets = s.widgets;
       saveLayout(nextWidgets);
       return {
-        findings: [...s.findings, ...findings],
-        batches: [...s.batches, batch],
+        findings: nextFindings,
+        batches: nextBatches,
         scanline: s.scanline + 1,
       };
     }),
@@ -317,8 +352,9 @@ export const useDashboardStore = create<DashboardState>((set) => ({
   loadSampleData: () =>
     set((s) => {
       const { findings, batches } = generateSampleData();
+      const enriched = enrichFindings(findings, batches);
       return {
-        findings,
+        findings: enriched,
         batches,
         filters: initialFilters,
         scanline: s.scanline + 1,
@@ -330,6 +366,7 @@ export const useDashboardStore = create<DashboardState>((set) => ({
       findings: [],
       batches: [],
       filters: initialFilters,
+      remediationStatuses: {},
     }),
 }));
 

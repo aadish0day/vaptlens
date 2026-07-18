@@ -80,7 +80,7 @@ export function AreaChartWidget({ widget, data, onSelect }: ChartProps) {
                 key={s}
                 type="monotone"
                 dataKey={s}
-                stackId="a"
+                stackId={widget.barLayout === "grouped" ? undefined : "a"}
                 stroke={c}
                 strokeWidth={2}
                 fill={c}

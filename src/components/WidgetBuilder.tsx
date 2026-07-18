@@ -50,6 +50,16 @@ const FIELD_OPTIONS: { value: FieldKey; label: string }[] = [
   { value: "name", label: "Finding name" },
   { value: "cvssBucket", label: "CVSS band" },
   { value: "scanDate", label: "Scan date" },
+  { value: "scanMonth", label: "Scan month" },
+  { value: "lifecycle", label: "Lifecycle (New/Open/Fixed)" },
+  { value: "slaStatus", label: "SLA Status (Met/Breached)" },
+  { value: "isExploitable", label: "Exploitability" },
+  { value: "isEol", label: "EOL / Obsolete Status" },
+  { value: "isZeroDay", label: "Zero-day Status" },
+  { value: "unpatchedAge", label: "Unpatched Duration" },
+  { value: "owaspCategory", label: "OWASP Top 10 Category" },
+  { value: "agingBucket", label: "Vulnerability Aging Bucket" },
+  { value: "subnet", label: "IP Subnet Range" },
 ];
 
 const AGG_OPTIONS: { value: Aggregation; label: string }[] = [
@@ -79,6 +89,7 @@ export function WidgetBuilder({
   const [aggregation, setAggregation] = useState<Aggregation>("count");
   const [topN, setTopN] = useState<number>(10);
   const [sortBy, setSortBy] = useState<"value" | "label">("value");
+  const [barLayout, setBarLayout] = useState<"stacked" | "grouped">("stacked");
 
   const filtered = useMemo(() => applyFilters(findings, filters), [findings, filters]);
 
@@ -90,6 +101,7 @@ export function WidgetBuilder({
     colorBy: colorBy || undefined,
     aggregation,
     sortBy,
+    barLayout: chartType === "bar" && colorBy ? barLayout : undefined,
     topN:
       chartType === "bar" ||
       chartType === "histogram" ||
@@ -227,6 +239,38 @@ export function WidgetBuilder({
                     ))}
                   </SelectContent>
                 </Select>
+              </div>
+            )}
+
+            {chartType === "bar" && colorBy && (
+              <div className="space-y-1.5">
+                <Label>Bar Layout</Label>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setBarLayout("stacked")}
+                    className={cn(
+                      "flex-1 rounded-lg border py-1.5 text-xs font-medium transition-colors",
+                      barLayout === "stacked"
+                        ? "border-primary bg-primary/10 text-primary border-primary/20"
+                        : "border-border bg-card text-muted-foreground hover:bg-accent"
+                    )}
+                  >
+                    Stacked
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBarLayout("grouped")}
+                    className={cn(
+                      "flex-1 rounded-lg border py-1.5 text-xs font-medium transition-colors",
+                      barLayout === "grouped"
+                        ? "border-primary bg-primary/10 text-primary border-primary/20"
+                        : "border-border bg-card text-muted-foreground hover:bg-accent"
+                    )}
+                  >
+                    Grouped (Side-by-Side)
+                  </button>
+                </div>
               </div>
             )}
 

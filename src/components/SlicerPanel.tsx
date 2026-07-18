@@ -269,6 +269,59 @@ export function SlicerPanel() {
       <Separator />
 
       <Section title="Date range" icon={<CalendarDays className="h-3.5 w-3.5" />}>
+        <div className="mb-2.5 flex gap-1.5">
+          <button
+            type="button"
+            onClick={() => {
+              if (options.dates.length === 0) return;
+              const maxDateStr = options.dates[options.dates.length - 1];
+              const maxDate = new Date(maxDateStr);
+              const minDate = new Date(maxDate);
+              minDate.setDate(maxDate.getDate() - 7);
+              setFilter("dateRange", [minDate.toISOString().slice(0, 10), maxDateStr]);
+            }}
+            className="flex-1 rounded-md border border-border bg-card py-1 text-[10px] font-medium text-muted-foreground hover:bg-accent hover:text-foreground transition-colors cursor-pointer"
+          >
+            7 Days
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              if (options.dates.length === 0) return;
+              const maxDateStr = options.dates[options.dates.length - 1];
+              const maxDate = new Date(maxDateStr);
+              const minDate = new Date(maxDate);
+              minDate.setDate(maxDate.getDate() - 15);
+              setFilter("dateRange", [minDate.toISOString().slice(0, 10), maxDateStr]);
+            }}
+            className="flex-1 rounded-md border border-border bg-card py-1 text-[10px] font-medium text-muted-foreground hover:bg-accent hover:text-foreground transition-colors cursor-pointer"
+          >
+            15 Days
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              if (options.dates.length === 0) return;
+              const maxDateStr = options.dates[options.dates.length - 1];
+              const maxDate = new Date(maxDateStr);
+              const minDate = new Date(maxDate);
+              minDate.setDate(maxDate.getDate() - 210); // 30 weeks
+              setFilter("dateRange", [minDate.toISOString().slice(0, 10), maxDateStr]);
+            }}
+            className="flex-1 rounded-md border border-border bg-card py-1 text-[10px] font-medium text-muted-foreground hover:bg-accent hover:text-foreground transition-colors cursor-pointer"
+          >
+            30 Weeks
+          </button>
+          {filters.dateRange && (
+            <button
+              type="button"
+              onClick={() => setFilter("dateRange", undefined)}
+              className="rounded-md border border-border bg-card px-2 py-1 text-[10px] font-medium text-destructive hover:bg-destructive/10 transition-colors cursor-pointer"
+            >
+              Reset
+            </button>
+          )}
+        </div>
         <div className="flex items-center gap-2">
           <input
             type="date"

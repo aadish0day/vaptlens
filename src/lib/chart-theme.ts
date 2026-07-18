@@ -68,8 +68,30 @@ const SERIES_DARK = [
   "#94A3B8",
 ];
 
+const CUSTOM_SERIES_HEX: Record<string, string> = {
+  Met: "#46A758",
+  Breached: "#E5484D",
+  Fixed: "#46A758",
+  New: "#818CF8",
+  Open: "#F2994A",
+  Exploitable: "#F2994A",
+  "Not Exploitable": "#94A3B8",
+  "EOL/Obsolete": "#F2994A",
+  Supported: "#94A3B8",
+  "Zero-day": "#E5484D",
+  Known: "#94A3B8",
+  "Unpatched > 6 Months": "#F2994A",
+  "Unpatched < 6 Months": "#94A3B8",
+  "0–30 Days": "#46A758",
+  "31–90 Days": "#818CF8",
+  "91–180 Days": "#F2994A",
+  "180+ Days": "#E5484D",
+  Remediated: "#46A758",
+};
+
 export function seriesColor(name: string, index: number, dark: boolean): string {
   if (name in SEVERITY_HEX) return SEVERITY_HEX[name as Severity];
+  if (name in CUSTOM_SERIES_HEX) return CUSTOM_SERIES_HEX[name];
   const palette = dark ? SERIES_DARK : SERIES_LIGHT;
   return palette[index % palette.length];
 }
