@@ -91,7 +91,7 @@ export function ColumnMapper() {
   };
 
   return (
-    <Card className="border-primary/40">
+    <Card className="border-border">
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between gap-2">
           <CardTitle className="text-sm">Map columns</CardTitle>
@@ -102,7 +102,7 @@ export function ColumnMapper() {
       <CardContent className="space-y-3">
         {mappings.length > 0 && (
           <div className="flex flex-wrap items-center gap-1.5">
-            <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+            <span className="text-xs font-medium text-muted-foreground">
               Presets
             </span>
             {mappings.map((m) => (
@@ -110,7 +110,7 @@ export function ColumnMapper() {
                 key={m.name}
                 type="button"
                 onClick={() => applyPreset(m.name)}
-                className="rounded-full border border-border bg-card px-2.5 py-0.5 text-[11px] font-medium text-muted-foreground transition-colors hover:border-primary/50 hover:text-primary"
+                className="rounded-full border border-border bg-card px-2.5 py-0.5 text-[11px] font-medium text-muted-foreground transition-colors hover:border-foreground/20 hover:text-foreground"
               >
                 {m.name}
               </button>

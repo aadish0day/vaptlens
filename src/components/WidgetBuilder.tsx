@@ -36,6 +36,8 @@ const CHART_TYPES: { value: ChartType; label: string }[] = [
   { value: "histogram", label: "Histogram" },
   { value: "table", label: "Table" },
   { value: "kpi", label: "KPI" },
+  { value: "slaBreach", label: "SLA Breach" },
+  { value: "hostRisk", label: "Host Risk" },
 ];
 
 const FIELD_OPTIONS: { value: FieldKey; label: string }[] = [
@@ -112,6 +114,8 @@ export function WidgetBuilder({
     layout: { x: 0, y: 0, w: 6, h: 6 },
   };
 
+  const isCompact = chartType === "kpi" || chartType === "slaBreach" || chartType === "hostRisk";
+
   const handleAdd = () => {
     const maxY = widgets.reduce((m, w) => Math.max(m, w.layout.y + w.layout.h), 0);
     addWidget({
@@ -120,15 +124,18 @@ export function WidgetBuilder({
       layout: {
         x: 0,
         y: maxY,
-        w: chartType === "kpi" ? 3 : 6,
-        h: chartType === "kpi" ? 2 : 6,
+        w: isCompact ? 3 : 6,
+        h: isCompact ? 3 : 6,
       },
     });
     onOpenChange(false);
   };
 
-  const NO_MEASURE = ["kpi", "table", "heatmap", "scatter"];
+  const NO_MEASURE = ["kpi", "table", "heatmap", "scatter", "slaBreach", "hostRisk"];
+  // These widget types operate on the raw filtered dataset and don't group by a field.
+  const NO_GROUP = ["slaBreach", "hostRisk"];
   const showAgg = !NO_MEASURE.includes(chartType);
+  const showGroup = !NO_GROUP.includes(chartType);
   const showSplit = ["bar", "area", "donut", "line", "radar", "treemap"].includes(
     chartType
   );
@@ -183,21 +190,23 @@ export function WidgetBuilder({
               </div>
             </div>
 
-            <div className="space-y-1.5">
-              <Label>Group by (category)</Label>
-              <Select value={groupBy} onValueChange={(v) => setGroupBy(v as FieldKey)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {FIELD_OPTIONS.map((o) => (
-                    <SelectItem key={o.value} value={o.value}>
-                      {o.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            {showGroup && (
+              <div className="space-y-1.5">
+                <Label>Group by (category)</Label>
+                <Select value={groupBy} onValueChange={(v) => setGroupBy(v as FieldKey)}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {FIELD_OPTIONS.map((o) => (
+                      <SelectItem key={o.value} value={o.value}>
+                        {o.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
 
             {showAgg && (
               <div className="space-y-1.5">

@@ -192,8 +192,8 @@ export function TemplateGallery({
       layout: {
         x: 0,
         y: maxY,
-        w: rest.chartType === "kpi" ? 3 : 6,
-        h: rest.chartType === "kpi" ? 2 : 6,
+        w: rest.chartType === "kpi" || rest.chartType === "slaBreach" || rest.chartType === "hostRisk" ? 3 : 6,
+        h: rest.chartType === "kpi" || rest.chartType === "slaBreach" || rest.chartType === "hostRisk" ? 3 : 6,
       },
     });
     onOpenChange(false);
@@ -224,7 +224,7 @@ export function TemplateGallery({
                   "group rounded-xl border border-border bg-card p-4 text-left shadow-sm transition-all duration-150",
                   locked
                     ? "cursor-not-allowed opacity-50"
-                    : "hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-pop focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    : "hover:-translate-y-0.5 hover:border-foreground/20 hover:shadow-pop focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 )}
               >
                 <div className="flex items-center justify-between gap-2">
@@ -234,7 +234,7 @@ export function TemplateGallery({
                   {locked ? (
                     <Lock className="h-3.5 w-3.5 text-muted-foreground" />
                   ) : (
-                    <Badge variant="muted" className="uppercase">
+                    <Badge variant="muted">
                       {t.chartType}
                     </Badge>
                   )}

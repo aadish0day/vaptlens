@@ -6,6 +6,8 @@ import { LayoutDashboard } from "lucide-react";
 import { useDashboardStore } from "../store/useDashboardStore";
 import { applyFilters } from "../lib/aggregate";
 import { Widget } from "./Widget";
+import { TopCriticalBreachWidget } from "./charts/TopCriticalBreachWidget";
+import { BreachBreakdownWidget } from "./charts/BreachBreakdownWidget";
 
 export function DashboardCanvas() {
   const widgets = useDashboardStore((s) => s.widgets);
@@ -66,7 +68,13 @@ export function DashboardCanvas() {
   }
 
   return (
-    <div ref={containerRef} id="dashboard-capture" className="w-full">
+    <div ref={containerRef} id="dashboard-capture" className="w-full space-y-4">
+      {/* Enterprise breach-risk headline widgets (respect global filters) */}
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+        <TopCriticalBreachWidget findings={filtered} />
+        <BreachBreakdownWidget findings={filtered} />
+      </div>
+
       <GridLayout
         className="layout"
         layout={items.map((it) => it.layout)}

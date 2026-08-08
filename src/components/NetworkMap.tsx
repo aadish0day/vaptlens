@@ -5,8 +5,10 @@ import { SEVERITY_HEX } from "../lib/chart-theme";
 import type { Finding, Severity } from "../lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Badge } from "./ui/badge";
-import { Network, Server, Cpu } from "lucide-react";
+import { Filter, FilterX, Network, Server, Cpu } from "lucide-react";
 import { SeverityBadge } from "./severity-badge";
+import { Button } from "./ui/button";
+import { cn } from "../lib/utils";
 
 interface NetworkNode {
   id: string;
@@ -30,7 +32,15 @@ interface NetworkLink {
 export function NetworkMap() {
   const findings = useDashboardStore((s) => s.findings);
   const filters = useDashboardStore((s) => s.filters);
+  const toggleCrossFilter = useDashboardStore((s) => s.toggleCrossFilter);
+  const crossFilters = useDashboardStore((s) => s.filters.crossFilters);
   const [selectedHostId, setSelectedHostId] = useState<string | null>(null);
+
+  const isHostFiltered = (host: string) =>
+    crossFilters.some((cf) => cf.field === "host" && cf.value === host);
+
+  const isSeverityFiltered = (sev: string) =>
+    crossFilters.some((cf) => cf.field === "severity" && cf.value === sev);
 
   // Apply active global filters, excluding Fixed placeholders from active risk topology
   const filteredFindings = useMemo(() => {
@@ -179,6 +189,13 @@ export function NetworkMap() {
     return { nodes: list, links: connectionLines, hostsMap: tempHostsMap };
   }, [filteredFindings, centerX, centerY]);
 
+  // Activate a host node: select it in the sidebar and toggle its cross-filter.
+  const activateHost = (node: NetworkNode) => {
+    if (node.type !== "host") return;
+    setSelectedHostId(node.id === selectedHostId ? null : node.id);
+    toggleCrossFilter("host", node.label);
+  };
+
   // Detailed view of selected host findings
   const selectedHostFindings = selectedHostId ? hostsMap.get(selectedHostId) || [] : [];
 
@@ -201,10 +218,7 @@ export function NetworkMap() {
               <svg width={width} height={height} className="max-w-full">
                 {/* SVG Shadow definitions for node glow */}
                 <defs>
-                  <filter id="glow-crit" x="-20%" y="-20%" width="140%" height="140%">
-                    <feGaussianBlur stdDeviation="3" result="blur" />
-                    <feComposite in="SourceGraphic" in2="blur" operator="over" />
-                  </filter>
+                  {/* (glow filter removed — no decorative effects) */}
                 </defs>
 
                 {/* SVG Style definitions for running link flow animations */}
@@ -257,51 +271,78 @@ export function NetworkMap() {
                   } else {
                     r = Math.min(12, 6 + Math.log2(node.count + 1) * 2);
                     fill = SEVERITY_HEX[node.severity as Severity] || fill;
-                    stroke = isSelected ? "hsl(var(--foreground))" : "hsl(var(--card))";
+                    stroke = isSelected
+                      ? "hsl(var(--foreground))"
+                      : isHostFiltered(node.label)
+                        ? "hsl(var(--primary))"
+                        : "hsl(var(--card))";
                   }
+
+                  const isHostNode = node.type === "host";
 
                   return (
                     <g
                       key={node.id}
-                      className={node.type === "host" ? "cursor-pointer group" : ""}
-                      onClick={() => {
-                        if (node.type === "host") {
-                          setSelectedHostId(node.id === selectedHostId ? null : node.id);
+                      role={isHostNode ? "button" : undefined}
+                      tabIndex={isHostNode ? 0 : undefined}
+                      aria-label={
+                        isHostNode
+                          ? `Host ${node.label}, ${node.count} findings, ${node.severity} severity`
+                          : undefined
+                      }
+                      aria-pressed={isHostNode ? isHostFiltered(node.label) : undefined}
+                      className={cn(
+                        isHostNode ? "group cursor-pointer outline-none" : ""
+                      )}
+                      onClick={(e) => {
+                        if (!isHostNode) return;
+                        // Guard against browser-synthesized clicks from Space/Enter
+                        // on role="button" (detail === 0) — keydown already activates.
+                        if (e.detail === 0) return;
+                        activateHost(node);
+                      }}
+                      onKeyDown={(e) => {
+                        if (!isHostNode) return;
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          activateHost(node);
                         }
                       }}
                     >
-                      {/* Interactive hover indicator ring */}
-                      {node.type === "host" && (
+                      {/* Interactive hover/focus indicator ring */}
+                      {isHostNode && (
                         <circle
                           cx={node.x}
                           cy={node.y}
                           r={r + 4}
-                          className="fill-none stroke-primary/30 opacity-0 group-hover:opacity-100 transition-opacity duration-150"
+                          className="fill-none stroke-primary/30 opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-visible:opacity-100"
                           strokeWidth="2"
                         />
                       )}
 
-                      {/* Pulsing sonar rings for Scanner center node */}
-                      {node.type === "center" && (
-                        <>
-                          <circle
-                            cx={node.x}
-                            cy={node.y}
-                            r={r + 8}
-                            className="fill-primary/5 stroke-primary/10 animate-pulse pointer-events-none"
-                            strokeWidth="1"
-                          />
-                          <circle
-                            cx={node.x}
-                            cy={node.y}
-                            r={r + 16}
-                            className="fill-none stroke-primary/5 opacity-40 animate-[ping_3s_cubic-bezier(0,0,0.2,1)_infinite] pointer-events-none"
-                            strokeWidth="1"
-                          />
-                        </>
+                      {/* Persistent ring when this host is cross-filtering the dashboard */}
+                      {isHostNode && isHostFiltered(node.label) && (
+                        <circle
+                          cx={node.x}
+                          cy={node.y}
+                          r={r + 5}
+                          className="fill-none stroke-primary/50"
+                          strokeWidth="2"
+                        />
                       )}
 
-                      {/* Main Node Node Circle */}
+                      {/* Scanner center node */}
+                      {node.type === "center" && (
+                        <circle
+                          cx={node.x}
+                          cy={node.y}
+                          r={r + 8}
+                          className="fill-primary/5 stroke-primary/10 pointer-events-none"
+                          strokeWidth="1"
+                        />
+                      )}
+
+                      {/* Main Node Circle */}
                       <circle
                         cx={node.x}
                         cy={node.y}
@@ -309,7 +350,6 @@ export function NetworkMap() {
                         fill={fill}
                         stroke={stroke}
                         strokeWidth={isSelected ? 2.5 : 1.5}
-                        filter={["Critical", "High"].includes(node.severity) && node.type === "host" ? "url(#glow-crit)" : undefined}
                         className="transition-all duration-150"
                       />
 
@@ -326,7 +366,7 @@ export function NetworkMap() {
                         className={`font-mono text-[9px] select-none ${
                           isSelected
                             ? "font-semibold fill-foreground"
-                            : "fill-muted-foreground group-hover:fill-foreground"
+                            : "fill-muted-foreground group-hover:fill-foreground group-focus-visible:fill-foreground"
                         }`}
                       >
                         {node.label}
@@ -349,8 +389,9 @@ export function NetworkMap() {
         </CardHeader>
         <CardContent className="p-4 space-y-4 max-h-[calc(100vh-14rem)] overflow-y-auto">
           {!selectedHostId ? (
-            <div className="flex h-72 flex-col items-center justify-center text-center text-xs text-muted-foreground">
-              Click a host node (IP) on the map to query segment details and CVEs.
+            <div className="flex h-72 flex-col items-center justify-center text-center text-xs text-muted-foreground px-4">
+              Select a host node (IP) to inspect its findings and cross-filter the dashboard —
+              click it, or Tab to it and press Enter/Space.
             </div>
           ) : (
             <div className="space-y-4">
@@ -367,13 +408,41 @@ export function NetworkMap() {
                 </Badge>
               </div>
 
+              {/* Cross-filter action for the selected host */}
+              <div className="flex items-center justify-between gap-2 rounded-lg border border-border bg-card px-3 py-2">
+                <span className="text-[11px] font-medium text-muted-foreground">
+                  {isHostFiltered(selectedHostId)
+                    ? "Dashboard filtered by this host"
+                    : "Dashboard filter"}
+                </span>
+                <Button
+                  variant={isHostFiltered(selectedHostId) ? "secondary" : "outline"}
+                  size="sm"
+                  className="h-7 gap-1.5 text-xs"
+                  onClick={() => toggleCrossFilter("host", selectedHostId)}
+                  aria-pressed={isHostFiltered(selectedHostId)}
+                >
+                  {isHostFiltered(selectedHostId) ? (
+                    <FilterX className="h-3.5 w-3.5" />
+                  ) : (
+                    <Filter className="h-3.5 w-3.5" />
+                  )}
+                  {isHostFiltered(selectedHostId) ? "Remove filter" : "Filter dashboard"}
+                </Button>
+              </div>
+
               {/* Finding Lists */}
               <div className="space-y-2.5">
-                <h4 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Vulnerabilities</h4>
+                <h4 className="text-xs font-semibold text-muted-foreground">Vulnerabilities</h4>
                 {selectedHostFindings.map((f: Finding) => (
                   <div key={f.id} className="rounded-lg border border-border bg-card p-3 space-y-2 text-xs">
                     <div className="flex items-center justify-between gap-2">
-                      <SeverityBadge severity={f.severity} />
+                      <SeverityBadge
+                        severity={f.severity}
+                        onClick={() => toggleCrossFilter("severity", f.severity)}
+                        ariaPressed={isSeverityFiltered(f.severity)}
+                        title="Click to cross-filter the dashboard by this severity"
+                      />
                       {f.cvss !== undefined && (
                         <span className="font-mono text-[10px] font-bold text-muted-foreground">
                           CVSS {f.cvss.toFixed(1)}
@@ -386,6 +455,19 @@ export function NetworkMap() {
                         {f.cve.join(", ")}
                       </p>
                     )}
+                    <div className="flex items-center justify-between gap-1 border-t border-border/30 pt-2 text-[9px] font-medium">
+                      <span
+                        className={cn(
+                          "flex items-center gap-1",
+                          isSeverityFiltered(f.severity) ? "text-primary" : "text-muted-foreground"
+                        )}
+                      >
+                        <Filter className="h-3 w-3" />
+                        {isSeverityFiltered(f.severity)
+                          ? `Filtering by ${f.severity} — click badge to remove`
+                          : "Click badge to filter dashboard by severity"}
+                      </span>
+                    </div>
                   </div>
                 ))}
               </div>

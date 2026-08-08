@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import type {
+  AuditEntry,
   FieldKey,
   Finding,
   FilterState,
@@ -7,13 +8,33 @@ import type {
   ScanBatch,
   Severity,
   WidgetConfig,
+  EnterpriseRole,
 } from "../lib/types";
-import { loadLayout, loadMappings, saveLayout, saveMappings, loadRemediationStatuses, saveRemediationStatuses } from "../lib/storage";
+import { loadLayout, loadMappings, saveLayout, saveMappings, loadRemediationStatuses, saveRemediationStatuses, loadGovernance, saveGovernance, loadAuditLog, saveAuditLog } from "../lib/storage";
 import { generateSampleData } from "../lib/sampleData";
 import { enrichFindings } from "../lib/aggregate";
 
 function uid(prefix = "w"): string {
   return `${prefix}_${Math.random().toString(36).slice(2, 9)}`;
+}
+
+export const PATCH_FLOW = [
+  "Unassigned",
+  "Assigned",
+  "In Progress",
+  "Pending Verification",
+  "Resolved",
+] as const;
+type PatchStatus = (typeof PATCH_FLOW)[number];
+
+function makeAudit(action: string, detail: string, actor: string): AuditEntry {
+  return {
+    id: uid("audit"),
+    ts: new Date().toISOString(),
+    action,
+    detail,
+    actor,
+  };
 }
 
 export function defaultWidgets(): WidgetConfig[] {
@@ -197,7 +218,33 @@ interface DashboardState {
   clearAllData: () => void;
   remediationStatuses: Record<string, "todo" | "in_progress" | "in_review" | "done">;
   updateRemediationStatus: (id: string, status: "todo" | "in_progress" | "in_review" | "done") => void;
+
+  userRole: EnterpriseRole;
+  twoFactorEnabled: boolean;
+  setUserRole: (role: EnterpriseRole) => void;
+  toggleTwoFactor: () => void;
+  assignFindingTeam: (
+    findingId: string,
+    team: Finding["assignedTeam"],
+    raci?: Finding["raciRole"]
+  ) => void;
+  raiseTicket: (findingId: string) => string;
+  remediateAllFiltered: () => void;
+
+  /** Per-host findings drawer state — survives tab switches (component unmounts). */
+  hostDrawerHost: string | null;
+  hostDrawerScroll: number;
+  openHostDrawer: (host: string) => void;
+  closeHostDrawer: () => void;
+  setHostDrawerScroll: (scroll: number) => void;
+
+  auditLog: AuditEntry[];
+  clearAuditLog: () => void;
+  /** Advances a finding through the patch verification pipeline. */
+  advancePatchStatus: (findingId: string) => void;
 }
+
+const persistedGovernance = loadGovernance();
 
 export const useDashboardStore = create<DashboardState>((set) => ({
   findings: [],
@@ -208,6 +255,106 @@ export const useDashboardStore = create<DashboardState>((set) => ({
   scanline: 0,
   pendingUpload: null,
   remediationStatuses: loadRemediationStatuses(),
+  userRole: persistedGovernance?.userRole ?? "Administrator",
+  twoFactorEnabled: persistedGovernance?.twoFactorEnabled ?? true,
+  auditLog: loadAuditLog(),
+  setUserRole: (role) =>
+    set((s) => {
+      const next = { userRole: role, twoFactorEnabled: s.twoFactorEnabled };
+      saveGovernance(next);
+      return next;
+    }),
+  toggleTwoFactor: () =>
+    set((s) => {
+      const next = { twoFactorEnabled: !s.twoFactorEnabled, userRole: s.userRole };
+      saveGovernance(next);
+      return next;
+    }),
+
+  clearAuditLog: () =>
+    set(() => {
+      saveAuditLog([]);
+      return { auditLog: [] };
+    }),
+
+  assignFindingTeam: (findingId, team, raci) =>
+    set((s) => {
+      const findings = s.findings.map((f) =>
+        f.id === findingId
+          ? {
+              ...f,
+              assignedTeam: team,
+              raciRole: raci ?? (team === "Server Team" ? "Responsible" : "Accountable"),
+              patchStatus: "Assigned" as const,
+            }
+          : f
+      );
+      const target = findings.find((f) => f.id === findingId);
+      const nextAudit = target
+        ? [makeAudit("ASSIGN", `${target.name} → ${team} (${target.raciRole})`, s.userRole), ...s.auditLog].slice(0, 200)
+        : s.auditLog;
+      saveAuditLog(nextAudit);
+      return { findings, auditLog: nextAudit };
+    }),
+
+  raiseTicket: (findingId) => {
+    const ticketId = `SEC-${Math.floor(1000 + Math.random() * 9000)}`;
+    set((s) => {
+      const findings = s.findings.map((f) =>
+        f.id === findingId ? { ...f, ticketId, patchStatus: "In Progress" as const } : f
+      );
+      const target = findings.find((f) => f.id === findingId);
+      const nextAudit = target
+        ? [makeAudit("TICKET", `${target.name} → ${ticketId} (${target.host})`, s.userRole), ...s.auditLog].slice(0, 200)
+        : s.auditLog;
+      saveAuditLog(nextAudit);
+      return { findings, auditLog: nextAudit };
+    });
+    return ticketId;
+  },
+
+  advancePatchStatus: (findingId) =>
+    set((s) => {
+      const f = s.findings.find((x) => x.id === findingId);
+      if (!f) return s;
+      const current = (f.patchStatus ?? "Unassigned") as PatchStatus;
+      const idx = PATCH_FLOW.indexOf(current);
+      const nextStatus = PATCH_FLOW[Math.min(idx + 1, PATCH_FLOW.length - 1)];
+      const findings = s.findings.map((x) =>
+        x.id === findingId ? { ...x, patchStatus: nextStatus as Finding["patchStatus"] } : x
+      );
+      const nextAudit = [
+        makeAudit("PATCH", `${f.name} → ${nextStatus} (${f.host})`, s.userRole),
+        ...s.auditLog,
+      ].slice(0, 200);
+      saveAuditLog(nextAudit);
+      return { findings, auditLog: nextAudit };
+    }),
+
+  remediateAllFiltered: () =>
+    set((s) => {
+      // Mark active findings as fixed
+      return {
+        findings: s.findings.map((f) => ({
+          ...f,
+          lifecycle: "Fixed" as const,
+          patchStatus: "Resolved" as const,
+        })),
+      };
+    }),
+
+  hostDrawerHost: null,
+  hostDrawerScroll: 0,
+  openHostDrawer: (host) =>
+    set((s) => ({
+      hostDrawerHost: host,
+      // Preserve scroll when re-opening the same host (e.g. tab-switch
+      // remount re-reads the ?host= URL); reset it for a different host.
+      hostDrawerScroll: s.hostDrawerHost === host ? s.hostDrawerScroll : 0,
+    })),
+  closeHostDrawer: () => set({ hostDrawerHost: null, hostDrawerScroll: 0 }),
+  setHostDrawerScroll: (scroll) => set({ hostDrawerScroll: scroll }),
+
   updateRemediationStatus: (id, status) =>
     set((s) => {
       const next = { ...s.remediationStatuses, [id]: status };

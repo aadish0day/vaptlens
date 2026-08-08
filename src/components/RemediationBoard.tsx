@@ -1,19 +1,21 @@
-import { useMemo } from "react";
-import { useDashboardStore } from "../store/useDashboardStore";
+import { useMemo, useState } from "react";
+import { useDashboardStore, PATCH_FLOW } from "../store/useDashboardStore";
 import { applyFilters } from "../lib/aggregate";
 import type { Finding } from "../lib/types";
 import { Card, CardContent } from "./ui/card";
 import { Badge } from "./ui/badge";
-import { Button } from "./ui/button";
-import { ChevronLeft, ChevronRight, Play, CheckCircle2, FileSearch, HelpCircle } from "lucide-react";
+import { ChevronLeft, ChevronRight, Play, CheckCircle2, FileSearch, HelpCircle, Filter, Workflow, ScrollText, Trash2 } from "lucide-react";
 import { SeverityBadge } from "./severity-badge";
 import { cn } from "../lib/utils";
+import { canPerform } from "../lib/permissions";
+import { RestrictedButton } from "./RestrictedButton";
+import { Button } from "./ui/button";
 
 const COLUMNS = [
-  { id: "todo", label: "To Do", color: "border-t-muted-foreground/30 bg-muted/5 text-muted-foreground", icon: <HelpCircle className="h-4 w-4 text-muted-foreground" /> },
-  { id: "in_progress", label: "In Progress", color: "border-t-blue-500 bg-blue-500/5 text-blue-600 dark:text-blue-400", icon: <Play className="h-4 w-4 text-blue-500 animate-pulse" /> },
-  { id: "in_review", label: "In Review", color: "border-t-purple-500 bg-purple-500/5 text-purple-600 dark:text-purple-400", icon: <FileSearch className="h-4 w-4 text-purple-500" /> },
-  { id: "done", label: "Remediated", color: "border-t-green-500 bg-green-500/5 text-green-600 dark:text-green-400", icon: <CheckCircle2 className="h-4 w-4 text-green-500" /> },
+  { id: "todo", label: "To Do", color: "bg-muted/40 text-muted-foreground", icon: <HelpCircle className="h-4 w-4 text-muted-foreground" /> },
+  { id: "in_progress", label: "In Progress", color: "bg-muted/40 text-muted-foreground", icon: <Play className="h-4 w-4 text-muted-foreground" /> },
+  { id: "in_review", label: "In Review", color: "bg-muted/40 text-muted-foreground", icon: <FileSearch className="h-4 w-4 text-muted-foreground" /> },
+  { id: "done", label: "Remediated", color: "bg-muted/40 text-muted-foreground", icon: <CheckCircle2 className="h-4 w-4 text-muted-foreground" /> },
 ] as const;
 
 type ColumnId = (typeof COLUMNS)[number]["id"];
@@ -23,6 +25,18 @@ export function RemediationBoard() {
   const filters = useDashboardStore((s) => s.filters);
   const remediationStatuses = useDashboardStore((s) => s.remediationStatuses);
   const updateRemediationStatus = useDashboardStore((s) => s.updateRemediationStatus);
+  const toggleCrossFilter = useDashboardStore((s) => s.toggleCrossFilter);
+  const crossFilters = useDashboardStore((s) => s.filters.crossFilters);
+  const userRole = useDashboardStore((s) => s.userRole);
+  const canRemediate = canPerform(userRole, "remediate");
+  const auditLog = useDashboardStore((s) => s.auditLog);
+  const clearAuditLog = useDashboardStore((s) => s.clearAuditLog);
+  const advancePatchStatus = useDashboardStore((s) => s.advancePatchStatus);
+
+  const [auditOpen, setAuditOpen] = useState(false);
+
+  const isHostFiltered = (host: string) =>
+    crossFilters.some((cf) => cf.field === "host" && cf.value === host);
 
   // Get globally sliced findings, excluding synthesized Fixed placeholders from active lists
   // since they are automatically handled
@@ -66,14 +80,111 @@ export function RemediationBoard() {
     }
   };
 
+  // Patch verification pipeline counts (from finding.patchStatus)
+  const pipelineCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const s of PATCH_FLOW) counts[s] = 0;
+    for (const f of filteredFindings) {
+      const st = f.patchStatus ?? "Unassigned";
+      counts[st] = (counts[st] ?? 0) + 1;
+    }
+    return counts;
+  }, [filteredFindings]);
+
+  const pipelineMax = Math.max(1, ...PATCH_FLOW.map((s) => pipelineCounts[s] ?? 0));
+
   return (
-    <div className="grid h-full grid-cols-1 gap-4 overflow-hidden md:grid-cols-4">
+    <div className="flex h-full flex-col gap-4 overflow-hidden">
+      {/* Patch Verification Pipeline header */}
+      <Card className="border-border bg-card/40 shrink-0">
+        <CardContent className="p-4">
+          <div className="flex items-center justify-between mb-3">
+            <span className="flex items-center gap-2 text-xs font-semibold text-muted-foreground">
+              <Workflow className="h-4 w-4 text-primary" /> Patch Verification Pipeline
+            </span>
+            <div className="flex items-center gap-2">
+              <Badge variant="outline" className="text-[10px]">
+                {auditLog.length} audit entries
+              </Badge>
+              <Button variant="ghost" size="sm" className="h-6 text-[10px] gap-1 text-muted-foreground" onClick={() => setAuditOpen((o) => !o)}>
+                <ScrollText className="h-3 w-3" />
+                {auditOpen ? "Hide audit trail" : "Show audit trail"}
+              </Button>
+              {auditLog.length > 0 && (
+                <Button variant="ghost" size="sm" className="h-6 text-[10px] gap-1 text-destructive" onClick={clearAuditLog}>
+                  <Trash2 className="h-3 w-3" /> Clear
+                </Button>
+              )}
+            </div>
+          </div>
+          <div className="flex items-center gap-1.5">
+            {PATCH_FLOW.map((stage, i) => (
+              <div key={stage} className="flex flex-1 items-center gap-1.5">
+                <div className="flex-1 rounded-lg border border-border bg-card px-2 py-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-semibold text-muted-foreground truncate">
+                      {stage}
+                    </span>
+                    <span className="font-mono text-xs font-extrabold text-foreground">
+                      {pipelineCounts[stage] ?? 0}
+                    </span>
+                  </div>
+                  <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-muted">
+                    <div
+                      className="h-full rounded-full transition-all duration-500"
+                      style={{
+                        width: `${((pipelineCounts[stage] ?? 0) / pipelineMax) * 100}%`,
+                        backgroundColor:
+                          stage === "Resolved"
+                            ? "#059669"
+                            : stage === "Pending Verification"
+                            ? "#6366F1"
+                            : stage === "In Progress"
+                            ? "#EA580C"
+                            : "#A8A29E",
+                      }}
+                    />
+                  </div>
+                </div>
+                {i < PATCH_FLOW.length - 1 && (
+                  <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground/50" />
+                )}
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Audit trail drawer */}
+      {auditOpen && (
+        <Card className="border-border bg-card/40 shrink-0 max-h-48">
+          <CardContent className="p-3 space-y-1.5 overflow-y-auto max-h-40">
+            {auditLog.length === 0 ? (
+              <p className="text-xs text-muted-foreground italic py-2">No governance actions recorded yet.</p>
+            ) : (
+              auditLog.map((e) => (
+                <div key={e.id} className="flex items-start justify-between gap-2 text-xs border-b border-border/40 pb-1.5">
+                  <div className="min-w-0">
+                    <span className="text-[10px] font-semibold text-primary">{e.action}</span>{" "}
+                    <span className="text-foreground">{e.detail}</span>
+                  </div>
+                  <span className="shrink-0 font-mono text-[9px] text-muted-foreground">
+                    {e.actor} · {new Date(e.ts).toLocaleString()}
+                  </span>
+                </div>
+              ))
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-hidden md:grid-cols-4">
       {COLUMNS.map((col) => {
         const list = columnsData[col.id];
         return (
           <div key={col.id} className="flex flex-col h-full rounded-xl border border-border bg-card/40">
             {/* Column Header */}
-            <div className={`flex items-center justify-between border-t-2 border-b border-border px-4 py-3 ${col.color}`}>
+            <div className={`flex items-center justify-between border-b border-border px-4 py-3 ${col.color}`}>
               <div className="flex items-center gap-2 font-semibold text-sm">
                 {col.icon}
                 {col.label}
@@ -94,13 +205,35 @@ export function RemediationBoard() {
                   const isFixedPlaceholder = f.lifecycle === "Fixed";
                   const isCompleted = col.id === "done" || isFixedPlaceholder;
                   return (
-                    <Card 
-                      key={f.id} 
+                    <Card
+                      key={f.id}
+                      role="button"
+                      tabIndex={0}
+                      onClick={(e) => {
+                        // Guard against browser-synthesized clicks from Space/Enter
+                        // on role="button" (detail === 0) — keydown already activates.
+                        if (e.detail === 0) return;
+                        toggleCrossFilter("host", f.host);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          toggleCrossFilter("host", f.host);
+                        }
+                      }}
+                      title="Click to cross-filter the dashboard by this host"
+                      aria-pressed={isHostFiltered(f.host)}
                       className={cn(
-                        "group relative border hover:border-primary/25 hover:shadow-pop transition-all duration-200 hover:-translate-y-0.5 rounded-xl",
+                        "group relative cursor-pointer select-none border rounded-xl transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                         isCompleted 
                           ? "bg-emerald-500/[0.01] border-emerald-500/20 dark:bg-emerald-500/[0.03] opacity-80" 
-                          : "bg-card border-border/80"
+                          : "bg-card border-border/80",
+                        // Active host-filter styling only on non-completed cards to
+                        // avoid conflicting background classes with the completed state.
+                        !isCompleted &&
+                          (isHostFiltered(f.host)
+                            ? "border-primary/50 bg-primary-soft ring-1 ring-primary/30"
+                            : "hover:border-foreground/20 hover:shadow-pop hover:-translate-y-0.5")
                       )}
                     >
                       <CardContent className="p-3.5 space-y-2.5">
@@ -140,51 +273,98 @@ export function RemediationBoard() {
                         {/* Badges/Tags */}
                         <div className="flex flex-wrap gap-1">
                           {f.isZeroDay === "Zero-day" && (
-                            <span className="rounded bg-purple-500/10 px-1 py-0.5 text-[8px] font-semibold uppercase tracking-wider text-purple-600 dark:text-purple-400 border border-purple-500/20">
+                            <span className="rounded bg-purple-500/10 px-1 py-0.5 text-[9px] font-semibold text-purple-600 dark:text-purple-400 border border-purple-500/20">
                               Zero-day
                             </span>
                           )}
                           {f.isExploitable === "Exploitable" && (
-                            <span className="rounded bg-red-500/10 px-1 py-0.5 text-[8px] font-semibold uppercase tracking-wider text-red-600 dark:text-red-400 border border-red-500/20">
+                            <span className="rounded bg-red-500/10 px-1 py-0.5 text-[9px] font-semibold text-red-600 dark:text-red-400 border border-red-500/20">
                               Exploit
                             </span>
                           )}
                           {f.isEol === "EOL/Obsolete" && (
-                            <span className="rounded bg-amber-500/10 px-1 py-0.5 text-[8px] font-semibold uppercase tracking-wider text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                            <span className="rounded bg-amber-500/10 px-1 py-0.5 text-[9px] font-semibold text-amber-600 dark:text-amber-400 border border-amber-500/20">
                               EOL
                             </span>
                           )}
                           {f.slaStatus === "Breached" && (
-                            <span className="rounded bg-rose-500/10 px-1 py-0.5 text-[8px] font-semibold uppercase tracking-wider text-rose-600 dark:text-rose-400 border border-rose-500/20">
+                            <span className="rounded bg-rose-500/10 px-1 py-0.5 text-[9px] font-semibold text-rose-600 dark:text-rose-400 border border-rose-500/20">
                               SLA Breach
                             </span>
                           )}
                         </div>
 
+                        {/* Cross-filter hint */}
+                        <div className="flex items-center gap-1 text-[9px] font-medium">
+                          <span
+                            className={cn(
+                              "flex items-center gap-1",
+                              isHostFiltered(f.host) ? "text-primary" : "text-muted-foreground"
+                            )}
+                          >
+                            <Filter className="h-3 w-3" />
+                            {isHostFiltered(f.host)
+                              ? "Filtering dashboard by host — click card to remove"
+                              : "Click card to filter dashboard by host"}
+                          </span>
+                        </div>
+
+                        {/* Patch status quick-advance on non-completed cards */}
+                        {!isCompleted && f.patchStatus && f.patchStatus !== "Resolved" && (
+                          <RestrictedButton
+                            variant="outline"
+                            size="sm"
+                            allowed={canRemediate}
+                            reason="Your role cannot advance patch status — ask an Administrator or Remediation Lead"
+                            title={`Advance patch status (currently ${f.patchStatus})`}
+                            className="h-6 w-full text-[9px] gap-1 border-primary/20 text-primary hover:bg-primary/5"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              advancePatchStatus(f.id);
+                            }}
+                            onKeyDown={(e) => e.stopPropagation()}
+                          >
+                            <Workflow className="h-3 w-3" />
+                            {f.patchStatus} → next
+                          </RestrictedButton>
+                        )}
+
                         {/* Action buttons (Move Card) */}
                         {!isFixedPlaceholder && (
                           <div className="flex items-center justify-end gap-1.5 border-t border-border/40 pt-2.5 mt-2">
                             {col.id !== "todo" && (
-                              <Button
+                              <RestrictedButton
                                 variant="ghost"
                                 size="icon"
-                                className="h-6 w-6 rounded-md hover:bg-muted border border-border/30 hover:border-border text-muted-foreground transition-all flex items-center justify-center"
-                                onClick={() => moveCard(f.id, col.id, "left")}
+                                allowed={canRemediate}
+                                reason="Your role cannot move cards — ask an Administrator or Remediation Lead"
                                 title="Move back"
+                                className="h-6 w-6 rounded-md hover:bg-muted border border-border/30 hover:border-border text-muted-foreground transition-all flex items-center justify-center"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  moveCard(f.id, col.id, "left");
+                                }}
+                                onKeyDown={(e) => e.stopPropagation()}
                               >
                                 <ChevronLeft className="h-3.5 w-3.5" />
-                              </Button>
+                              </RestrictedButton>
                             )}
                             {col.id !== "done" && (
-                              <Button
+                              <RestrictedButton
                                 variant="ghost"
                                 size="icon"
-                                className="h-6 w-6 rounded-md hover:bg-muted border border-border/30 hover:border-border text-primary transition-all flex items-center justify-center"
-                                onClick={() => moveCard(f.id, col.id, "right")}
+                                allowed={canRemediate}
+                                reason="Your role cannot move cards — ask an Administrator or Remediation Lead"
                                 title="Move forward"
+                                className="h-6 w-6 rounded-md hover:bg-muted border border-border/30 hover:border-border text-primary transition-all flex items-center justify-center"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  moveCard(f.id, col.id, "right");
+                                }}
+                                onKeyDown={(e) => e.stopPropagation()}
                               >
                                 <ChevronRight className="h-3.5 w-3.5" />
-                              </Button>
+                              </RestrictedButton>
                             )}
                           </div>
                         )}
@@ -197,6 +377,7 @@ export function RemediationBoard() {
           </div>
         );
       })}
+      </div>
     </div>
   );
 }

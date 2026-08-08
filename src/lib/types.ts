@@ -3,11 +3,11 @@ export type Severity = "Critical" | "High" | "Medium" | "Low" | "Info";
 export const SEVERITIES: Severity[] = ["Critical", "High", "Medium", "Low", "Info"];
 
 export const SEVERITY_COLORS: Record<Severity, string> = {
-  Critical: "#E5484D",
-  High: "#F2994A",
-  Medium: "#F2C94C",
-  Low: "#56CCF2",
-  Info: "#7D8CA3",
+  Critical: "#DC2626",
+  High: "#EA580C",
+  Medium: "#D97706",
+  Low: "#0D9488",
+  Info: "#78716C",
 };
 
 export const SEVERITY_ORDER: Record<Severity, number> = {
@@ -40,13 +40,65 @@ export interface Finding {
   lifecycle?: "New" | "Open" | "Fixed";
   slaStatus?: "Met" | "Breached";
   isExploitable?: "Exploitable" | "Not Exploitable";
+  /** Scored exploitability confidence (0+; >= 3 is Exploitable). */
+  exploitabilityScore?: number;
   isEol?: "EOL/Obsolete" | "Supported";
   isZeroDay?: "Zero-day" | "Known";
   unpatchedAge?: "Unpatched > 6 Months" | "Unpatched < 6 Months";
   owaspCategory?: string;
   agingBucket?: string;
   subnet?: string;
+
+  // Threat Intel & Deduplication computed fields
+  cisaKev?: "CISA KEV" | "Not in KEV";
+  ransomwareVector?: "Ransomware Threat" | "Standard Risk";
+  publicExploit?: "Public Exploit (PoC/Metasploit)" | "No Public Exploit";
+  occurrenceCount?: number;
+  affectedUrls?: string[];
+  affectedPorts?: string[];
+  toolsDetected?: string[];
+
+  // Enterprise Governance, RACI & SLA fields
+  assignedTeam?: "Server Team" | "DevOps / Cloud" | "Database DBAs" | "SecOps" | "Application Dev";
+  raciRole?: "Responsible" | "Accountable" | "Consulted" | "Informed";
+  ticketId?: string;
+  patchStatus?: "Unassigned" | "Assigned" | "In Progress" | "Pending Verification" | "Resolved";
+
+  // Deep enterprise analytics fields
+  /** ISO date the SLA window expires (first-seen + severity target). */
+  slaDeadline?: string;
+  /** Days remaining until SLA breach (negative = already breached). */
+  slaDaysLeft?: number;
+  /** Version string extracted from the finding name (e.g. "Apache 2.4.41"). */
+  extractedVersion?: string;
+  /** Normalized 0–100 host risk contribution for this finding. */
+  riskContribution?: number;
 }
+
+export interface AuditEntry {
+  id: string;
+  ts: string;
+  action: string;
+  detail: string;
+  actor: string;
+}
+
+export interface AssetItem {
+  id: string;
+  host: string;
+  ip: string;
+  os: string;
+  deviceType: "Web Server" | "Database" | "API Gateway" | "Domain Controller" | "Internal Subnet";
+  tier: "Tier 1 - Crown Jewel" | "Tier 2 - Production" | "Tier 3 - Dev/Staging";
+  ownerTeam: "Server Team" | "DevOps / Cloud" | "Database DBAs" | "SecOps" | "Application Dev";
+  eolStatus: "Supported" | "EOS/EOL";
+  activeVulnCount: number;
+  criticalCount: number;
+  riskScore: number;
+}
+
+export type EnterpriseRole = "Administrator" | "Security Auditor" | "Remediation Lead";
+
 
 export interface ScanBatch {
   id: string;
@@ -78,7 +130,10 @@ export type FieldKey =
   | "scanMonth"
   | "owaspCategory"
   | "agingBucket"
-  | "subnet";
+  | "subnet"
+  | "cisaKev"
+  | "ransomwareVector"
+  | "publicExploit";
 
 export type Aggregation =
   | "count"
@@ -99,6 +154,8 @@ export const CHART_TYPES: ChartType[] = [
   "histogram",
   "table",
   "kpi",
+  "slaBreach",
+  "hostRisk",
 ];
 
 export const FIELD_KEYS: FieldKey[] = [
@@ -124,6 +181,9 @@ export const FIELD_KEYS: FieldKey[] = [
   "owaspCategory",
   "agingBucket",
   "subnet",
+  "cisaKev",
+  "ransomwareVector",
+  "publicExploit",
 ];
 
 export const AGGREGATIONS: Aggregation[] = [
@@ -157,7 +217,9 @@ export type ChartType =
   | "heatmap"
   | "scatter"
   | "table"
-  | "kpi";
+  | "kpi"
+  | "slaBreach"
+  | "hostRisk";
 
 export interface WidgetConfig {
   id: string;

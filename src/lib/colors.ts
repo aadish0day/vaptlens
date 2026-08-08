@@ -1,14 +1,14 @@
 import { SEVERITY_COLORS, type Severity } from "./types";
 
 const SERIES_PALETTE = [
-  "#3DDC97",
-  "#56CCF2",
-  "#F2994A",
-  "#F2C94C",
-  "#B388FB",
-  "#FF7AB6",
-  "#7D8CA3",
-  "#4ADE80",
+  "#0F766E",
+  "#1D4ED8",
+  "#7C3AED",
+  "#DB2777",
+  "#B45309",
+  "#059669",
+  "#6366F1",
+  "#78716C",
 ];
 
 export function isSeverity(name: string): name is Severity {

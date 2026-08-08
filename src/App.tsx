@@ -14,6 +14,9 @@ import {
   Network,
   Target,
   FileText,
+  ArrowRightLeft,
+  Server,
+  Shield,
 } from "lucide-react";
 import { useDashboardStore } from "./store/useDashboardStore";
 import { UploadZone } from "./components/UploadZone";
@@ -28,6 +31,9 @@ import { PrioritizationMatrix } from "./components/PrioritizationMatrix";
 import { RemediationBoard } from "./components/RemediationBoard";
 import { NetworkMap } from "./components/NetworkMap";
 import { ReportBuilder } from "./components/ReportBuilder";
+import { DeltaAnalysis } from "./components/DeltaAnalysis";
+import { AssetInventory } from "./components/AssetInventory";
+import { GovernanceSLA } from "./components/GovernanceSLA";
 import { Button } from "./components/ui/button";
 import {
   Sheet,
@@ -81,22 +87,25 @@ export default function App() {
   const batchesCount = useDashboardStore((s) => s.batches.length);
   const clearAllData = useDashboardStore((s) => s.clearAllData);
 
-  const [activeTab, setActiveTab] = useState<"dashboard" | "matrix" | "board" | "map" | "report">("dashboard");
+  const [activeTab, setActiveTab] = useState<"dashboard" | "matrix" | "board" | "map" | "report" | "diff" | "assets" | "governance">("dashboard");
   const [builderOpen, setBuilderOpen] = useState(false);
   const [galleryOpen, setGalleryOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
 
   const activeTitle = {
     dashboard: { label: "Dashboard", icon: <LayoutDashboard className="h-4 w-4 text-primary" /> },
-    matrix: { label: "Prioritization Matrix", icon: <Target className="h-4 w-4 text-emerald-500" /> },
-    board: { label: "Remediation Board", icon: <Kanban className="h-4 w-4 text-blue-500" /> },
-    map: { label: "Subnet Network Map", icon: <Network className="h-4 w-4 text-purple-500" /> },
-    report: { label: "Executive Report Builder", icon: <FileText className="h-4 w-4 text-amber-500" /> },
+    matrix: { label: "Prioritization Matrix", icon: <Target className="h-4 w-4 text-primary" /> },
+    board: { label: "Remediation Board", icon: <Kanban className="h-4 w-4 text-primary" /> },
+    map: { label: "Subnet Network Map", icon: <Network className="h-4 w-4 text-primary" /> },
+    report: { label: "Executive Report Builder", icon: <FileText className="h-4 w-4 text-primary" /> },
+    diff: { label: "Re-Test Verification & Differential Auditor", icon: <ArrowRightLeft className="h-4 w-4 text-primary" /> },
+    assets: { label: "Asset Inventory & Crown Jewels", icon: <Server className="h-4 w-4 text-primary" /> },
+    governance: { label: "Governance, SLA & RACI Matrix", icon: <Shield className="h-4 w-4 text-primary" /> },
   }[activeTab];
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-background text-foreground">
-      <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-border bg-card/80 px-4 backdrop-blur supports-[backdrop-filter]:bg-card/70 print:hidden">
+      <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-border bg-card px-4 print:hidden">
         <Button
           variant="ghost"
           size="icon"
@@ -107,20 +116,22 @@ export default function App() {
           <PanelLeft className="h-[18px] w-[18px]" />
         </Button>
 
-        <div className="flex items-center gap-2.5">
-          <div className="grid h-8 w-8 place-items-center rounded-lg bg-gradient-to-br from-primary to-[#8B5CF6] text-white shadow-sm">
+        <div className="flex items-center gap-3">
+          <div className="grid h-7 w-7 place-items-center rounded-md bg-primary text-primary-foreground">
             <ShieldCheck className="h-[18px] w-[18px]" />
           </div>
           <div className="leading-tight">
-            <div className="text-sm font-semibold tracking-tight">VAPTLens</div>
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-semibold tracking-tight">VAPTLens</span>
+            </div>
             <div className="hidden text-[11px] text-muted-foreground sm:block">
               Vulnerability scan analytics
             </div>
           </div>
         </div>
 
-        <div className="ml-auto flex items-center gap-2">
-          <span className="hidden items-center gap-1.5 rounded-full border border-border bg-card px-2.5 py-1 text-[11px] font-medium text-muted-foreground lg:flex">
+        <div className="ml-auto flex items-center gap-2.5">
+          <span className="hidden items-center gap-1.5 text-[11px] text-muted-foreground lg:flex">
             <Lock className="h-3 w-3" />
             Client-side · nothing leaves this browser
           </span>
@@ -148,9 +159,9 @@ export default function App() {
         </Sheet>
 
         <main className="flex min-w-0 flex-1 flex-col">
-          <div className="flex items-center gap-3 border-b border-border bg-card/60 px-4 py-2.5 backdrop-blur print:hidden">
+          <div className="flex items-center gap-3 border-b border-border bg-card px-4 py-2.5 print:hidden">
             <div className="min-w-0">
-              <h1 className="flex items-center gap-1.5 text-sm font-semibold tracking-tight">
+              <h1 className="flex items-center gap-2 text-sm font-semibold tracking-tight">
                 {activeTitle.icon}
                 {activeTitle.label}
               </h1>
@@ -167,7 +178,7 @@ export default function App() {
                   onClick={clearAllData}
                   className="text-muted-foreground hover:text-destructive hover:bg-destructive/10"
                 >
-                  <Trash2 className="h-4 w-4" />
+                  <Trash2 className="h-3.5 w-3.5" />
                   <span className="hidden lg:inline">Clear Data</span>
                 </Button>
               )}
@@ -179,12 +190,13 @@ export default function App() {
                     size="sm"
                     onClick={() => setGalleryOpen(true)}
                     disabled={findingsCount === 0}
+
                   >
-                    <LayoutGrid className="h-4 w-4" />
+                    <LayoutGrid className="h-3.5 w-3.5" />
                     <span className="hidden sm:inline">Templates</span>
                   </Button>
                   <Button size="sm" onClick={() => setBuilderOpen(true)} disabled={findingsCount === 0}>
-                    <Plus className="h-4 w-4" />
+                    <Plus className="h-3.5 w-3.5" />
                     <span className="hidden sm:inline">Add Widget</span>
                   </Button>
                 </>
@@ -200,8 +212,26 @@ export default function App() {
                 onClick={() => setActiveTab("dashboard")}
                 className="text-xs h-7 gap-1.5"
               >
-                <LayoutDashboard className="h-3.5 w-3.5 text-primary" />
+                <LayoutDashboard className="h-3.5 w-3.5 text-muted-foreground" />
                 Dashboard
+              </Button>
+              <Button
+                variant={activeTab === "assets" ? "secondary" : "ghost"}
+                size="sm"
+                onClick={() => setActiveTab("assets")}
+                className="text-xs h-7 gap-1.5"
+              >
+                <Server className="h-3.5 w-3.5 text-muted-foreground" />
+                Asset Inventory
+              </Button>
+              <Button
+                variant={activeTab === "governance" ? "secondary" : "ghost"}
+                size="sm"
+                onClick={() => setActiveTab("governance")}
+                className="text-xs h-7 gap-1.5"
+              >
+                <Shield className="h-3.5 w-3.5 text-muted-foreground" />
+                SLA &amp; RACI
               </Button>
               <Button
                 variant={activeTab === "matrix" ? "secondary" : "ghost"}
@@ -209,7 +239,7 @@ export default function App() {
                 onClick={() => setActiveTab("matrix")}
                 className="text-xs h-7 gap-1.5"
               >
-                <Target className="h-3.5 w-3.5 text-emerald-500" />
+                <Target className="h-3.5 w-3.5 text-muted-foreground" />
                 Prioritization Matrix
               </Button>
               <Button
@@ -218,7 +248,7 @@ export default function App() {
                 onClick={() => setActiveTab("board")}
                 className="text-xs h-7 gap-1.5"
               >
-                <Kanban className="h-3.5 w-3.5 text-blue-500" />
+                <Kanban className="h-3.5 w-3.5 text-muted-foreground" />
                 Remediation Board
               </Button>
               <Button
@@ -227,8 +257,17 @@ export default function App() {
                 onClick={() => setActiveTab("map")}
                 className="text-xs h-7 gap-1.5"
               >
-                <Network className="h-3.5 w-3.5 text-purple-500" />
+                <Network className="h-3.5 w-3.5 text-muted-foreground" />
                 Network Map
+              </Button>
+              <Button
+                variant={activeTab === "diff" ? "secondary" : "ghost"}
+                size="sm"
+                onClick={() => setActiveTab("diff")}
+                className="text-xs h-7 gap-1.5"
+              >
+                <ArrowRightLeft className="h-3.5 w-3.5 text-muted-foreground" />
+                Re-Test Verification
               </Button>
               <Button
                 variant={activeTab === "report" ? "secondary" : "ghost"}
@@ -236,7 +275,7 @@ export default function App() {
                 onClick={() => setActiveTab("report")}
                 className="text-xs h-7 gap-1.5"
               >
-                <FileText className="h-3.5 w-3.5 text-amber-500" />
+                <FileText className="h-3.5 w-3.5 text-muted-foreground" />
                 Executive Report
               </Button>
             </div>
@@ -254,12 +293,18 @@ export default function App() {
               <Onboarding />
             ) : activeTab === "dashboard" ? (
               <DashboardCanvas />
+            ) : activeTab === "assets" ? (
+              <AssetInventory />
+            ) : activeTab === "governance" ? (
+              <GovernanceSLA />
             ) : activeTab === "matrix" ? (
               <PrioritizationMatrix />
             ) : activeTab === "board" ? (
               <RemediationBoard />
             ) : activeTab === "map" ? (
               <NetworkMap />
+            ) : activeTab === "diff" ? (
+              <DeltaAnalysis />
             ) : (
               <ReportBuilder />
             )}

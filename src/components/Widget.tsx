@@ -14,6 +14,8 @@ import { HeatmapWidget } from "./charts/Heatmap";
 import { ScatterChartWidget } from "./charts/ScatterChart";
 import { HistogramWidget } from "./charts/Histogram";
 import { KpiCardWidget } from "./charts/KpiCard";
+import { SlaBreachKpiWidget } from "./charts/SlaBreachKpi";
+import { HostRiskWidget } from "./charts/HostRiskWidget";
 import type { ChartProps } from "./charts/types";
 import { VulnTable } from "./VulnTable";
 import {
@@ -36,6 +38,8 @@ const chartMap: Record<
   heatmap: (p) => <HeatmapWidget {...p} />,
   scatter: (p) => <ScatterChartWidget {...p} />,
   kpi: (p) => <KpiCardWidget {...p} />,
+  slaBreach: (p) => <SlaBreachKpiWidget {...p} />,
+  hostRisk: (p) => <HostRiskWidget {...p} />,
   table: (p) => <VulnTable findings={p.filtered} />,
 };
 
@@ -57,7 +61,11 @@ export function Widget({
 
   const data = useMemo(
     () =>
-      render && widget.chartType !== "table" && widget.chartType !== "kpi"
+      render &&
+      widget.chartType !== "table" &&
+      widget.chartType !== "kpi" &&
+      widget.chartType !== "slaBreach" &&
+      widget.chartType !== "hostRisk"
         ? aggregate(filtered, widget)
         : null,
     [filtered, widget, render]
@@ -90,7 +98,7 @@ export function Widget({
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
       data-testid="widget"
-      className="widget-shell flex h-full flex-col overflow-hidden rounded-xl border border-border bg-card shadow-card"
+      className="widget-shell flex h-full flex-col overflow-hidden rounded-lg border border-border bg-card shadow-card"
     >
       <div className="widget-drag flex cursor-grab items-center gap-2 border-b border-border px-3 py-2 active:cursor-grabbing">
         <GripVertical className="h-4 w-4 shrink-0 text-muted-foreground/60" />

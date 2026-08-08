@@ -1,8 +1,8 @@
 # Design System — VAPTLens
 
-> **Direction (2026-07-14):** Rebuilt as a **premium SaaS analytics product** in the spirit of
-> Linear / Vercel / Stripe — calm, precise, and confident. Replaces the earlier
-> terminal/forensic concept. Light + dark, fully responsive, WCAG AA.
+> **Direction (2026-08-01):** Clean enterprise data platform — warm neutrals, deep teal
+> accent, no decoration. Inspired by Retool / Linear — quiet, structured, purposeful.
+> Replaces the earlier indigo/cyber aesthetic. Light + dark, fully responsive, WCAG AA.
 
 ## Product Context
 - **What this is:** A client-side, Power BI-style analytics dashboard for vulnerability scan data.
@@ -13,81 +13,104 @@
 - **Project type:** Technical dashboard (web app), data-dense, multi-panel.
 
 ## Aesthetic Direction
-- **Direction:** Premium SaaS / "instrument-grade." Restrained, layered surfaces, generous
-  whitespace, decisive accent. The craft is in the details (hairline borders, soft shadows,
-  micro-interactions) — not in decoration.
-- **Decoration level:** Minimal. One signature moment only: a subtle scanline sweep on scan
-  import (handled in the upload flow), and quiet hover/active motion everywhere else.
+- **Direction:** Clean enterprise data platform. Purposeful restraint — the craft is in
+  consistent spacing, quiet borders, and legible type. No gradients, no glowing effects,
+  no decorative animations. The interface should feel like a tool, not a showcase.
+- **Decoration level:** None. No accent bars on cards, no pulsing dots, no background
+  textures, no drop-shadow glows on hover. Borders and elevation do the separation work.
 - **Mood:** Professional, trustworthy, fast. Reads like a tool a serious team reaches for daily.
-- **Memorable thing:** *Clarity over spectacle.* Data is the hero; the chrome gets out of the way.
+- **Memorable thing:** *Warm neutrals.* The stone-tinted surfaces (not cold blue-gray) set this
+  apart from generic dashboard templates. Data is the hero; chrome gets out of the way.
 
 ## Typography
-- **UI / body:** **Inter** (400/500/600/700). Used for all labels, nav, table prose, buttons.
-- **Data / numbers / mono:** **JetBrains Mono** (400/500/600) for tabular alignment of metrics,
-  CVSS scores, ports, and the KPI figures. Self-hosted via `@fontsource`.
-- **Scale:** display 40px / h1 18px / h3 (widget titles) 13px semibold / body 14px / caption 11–12px.
+- **UI / body:** **Inter** (400/500/600) for all labels, navigation, table prose, buttons.
+  Sans-serif only for interface text — never monospace for navigation or headings.
+- **Data / numbers / mono:** **JetBrains Mono** (400/500) for tabular alignment of metrics,
+  CVSS scores, ports, IP addresses, and code-like content. Reserved strictly for data display.
+- **Scale:** widget titles 13px semibold / body 14px / caption 11–12px / tabs 13px regular.
 - **Numbers:** `tabular-nums` everywhere a figure can change, so columns don't jitter.
+- **Anti-patterns:** No `uppercase tracking-wider` on UI labels. No `font-mono` on navigation
+  or headings. These are AI slop patterns that make interfaces look generated rather than designed.
 
 ## Color
-- **Approach:** Light-first with a deep dark mode. A single indigo/violet brand accent used
-  *only* for interactive/active state and key data highlights. Severity colors are reserved
+- **Approach:** Warm-tinted neutrals with a deep teal accent. Light-first with a warm dark mode.
+  Teal is used for primary actions and focus states only. Severity colors are reserved
   strictly for severity encoding.
-- **Brand (primary):** indigo `#5B5BF6` (light) / `#818CF8` (dark) — Linear/Vercel-adjacent.
-- **Light surfaces:** page `#F6F7F9`, card `#FFFFFF`, sidebar `#FCFCFD`, border `#E4E7EC`,
-  text `#14181F`, muted `#6B7280`.
-- **Dark surfaces:** page `#0B0D14`, card `#141821`, sidebar `#11141B`, border `#2A2F3A`,
-  text `#E7EAF0`, muted `#98A2B3`.
+- **Brand (primary):** deep teal `#0F766E` (light) / `#2DD4BF` (dark).
+- **Light surfaces:** page `hsl(40 6% 97%)` warm stone, card `#FFFFFF`, sidebar `hsl(40 6% 98%)`,
+  border `hsl(30 6% 87%)`, text `hsl(20 14% 10%)`, muted `hsl(20 5% 46%)`.
+- **Dark surfaces:** page `hsl(20 8% 6%)` warm black, card `hsl(20 8% 13%)`,
+  sidebar `hsl(20 8% 9%)`, border `hsl(20 6% 26%)`, text `hsl(30 10% 90%)`,
+  muted `hsl(20 6% 62%)`.
 - **Severity (semantic, used only for severity):**
-  Critical `#E5484D` · High `#F2994A` · Medium `#F2C94C` · Low `#56CCF2` · Info `#7D8CA3`.
-  Badges use tinted backgrounds + a darkened text token per theme so every chip passes AA.
-- **Implementation:** Tokens are CSS variables (`--background`, `--primary`, …) defined in
-  `src/index.css` for `:root` and `.dark`, mapped into Tailwind v4 via `@theme inline`. Opacity
-  washes (e.g. `bg-primary-soft`) use `color-mix`.
+  Critical `#DC2626` · High `#EA580C` · Medium `#D97706` · Low `#0D9488` · Info `#78716C`.
+  Badges use tinted backgrounds + darker text per theme so every chip passes AA.
+- **Categorical series:** Teal → Blue → Purple → Pink → Amber → Emerald → Indigo → Stone.
+  Dark mode uses lighter variants for contrast on dark surfaces.
+- **Implementation:** CSS variables in `src/index.css` for `:root` and `.dark`, mapped into
+  Tailwind v4 via `@theme inline`. Chart colors centralized in `src/lib/chart-theme.ts`.
 
 ## Spacing
 - **Base unit:** 8px grid (Tailwind default 4px step, used at even multiples: 2/4/6/8).
-- **Density:** Compact-comfortable. Sidebar 288px, header 56px, canvas padding 24px (16px mobile),
-  widget gaps 16px, card padding 16–20px.
+- **Density:** Compact-comfortable. Sidebar 320px, header 56px, canvas padding 24px (16px mobile),
+  widget gaps 16px, card padding 12px, widget header padding 12px × 8px.
 
 ## Layout
 - **Approach:** Strict app chrome (header / sidebar / canvas) + free canvas (react-grid-layout)
   for widgets — Power BI-style. The grid gives the "instrument" feel; the chrome stays quiet.
-- **Responsive:** Sidebar is a static column ≥768px and a slide-in **Sheet** (<768px). Toolbar
-  actions collapse labels to icons on small screens. Widgets collapse to a single column on mobile.
-- **Max content width:** fluid (fills viewport); canvas widgets bounded by the 12-col grid.
-- **Radii:** hierarchical — controls/inputs 8px, cards/widgets 12px, pills 9999px, Sheet 0.
+- **Header:** 56px, solid card background, no blur effects. Flat teal logo mark (rounded-md),
+  plain text "VAPTLens", short subtitle. No badges, no gradient logos, no pulsing indicators.
+- **Sidebar:** 320px static column ≥768px, slide-in Sheet on mobile.
+- **Tab bar:** Compact, icon + label buttons, no special font treatment. Active state uses
+  `secondary` variant. No monospace, no uppercase, no tracking-wider.
+- **Widget cards:** `rounded-lg`, 1px border, card background, subtle shadow-card. No top accent
+  bars, no hover glows, no colored borders. Title is 13px semibold in the default sans-serif.
+- **Radii:** controls 8px, cards 8px, pills 9999px.
 
 ## Motion (Framer Motion)
-- **Approach:** Subtle, functional, never decorative for its own sake. All motion respects
-  `prefers-reduced-motion` via `<MotionConfig reducedMotion="user">`.
-- **Easing:** expressive ease-out `[0.22, 1, 0.36, 1]` for entrances; spring for dialogs.
-- **Moments:** canvas fade/slide-in, widget card entrance, cross-filter pill add/remove
-  (layout + scale), dialog zoom, dropzone active state, hover lift on template cards, error
-  expand/collapse.
-- **Duration:** micro 150ms · short 200–300ms · dialog 200–300ms.
+- **Approach:** Minimal, functional. All motion respects `prefers-reduced-motion`.
+- **Easing:** `[0.22, 1, 0.36, 1]` for entrances.
+- **Moments:** canvas fade-in, widget entrance, cross-filter pill transitions.
+- **Duration:** micro 150ms · short 200–300ms.
+- **Anti-patterns:** No `animate-pulse`, no `drop-shadow` glow effects, no background pattern
+  animations. These read as decoration, not function.
 
 ## Components
 - **Library:** **shadcn/ui** (Radix primitives + `class-variance-authority`) in `src/components/ui/`.
-  Button, Card, Input, Label, Badge, Checkbox, Select, Dialog, Sheet, Tooltip, Separator,
-  ScrollArea, Table, Skeleton.
-- **Theme:** `ThemeProvider` (class-based `.dark`, persisted to `localStorage`, no-flash inline
-  script in `index.html`). Toggle in the header. Charts read theme via `useChartTheme()`.
-- **Charts:** Recharts, themed per `src/lib/chart-theme.ts` (axis/grid/tooltip tokens + severity
-  and categorical palettes for light/dark). Donut shows a centered total; bars/lines have rounded
-  caps and soft tooltips.
+- **Theme:** `ThemeProvider` (class-based `.dark`, persisted to `localStorage`). Charts
+  read theme via `useChartTheme()`.
+- **Charts:** Recharts, themed per `src/lib/chart-theme.ts`. Warm stone axis colors,
+  tinted grid lines, clean tooltips without glow effects.
+- **Severity badges:** `rounded-full`, colored dot + tinted background. No pulse animation,
+  no monospace, no uppercase tracking.
 
 ## Accessibility (WCAG AA)
 - Visible focus rings (`box-shadow` ring, keyboard-only), labeled icon buttons, `aria-label` on
-  all controls, `role="button"` + keyboard handlers on the dropzone, semantic `<table>` with
-  sortable headers, AA-contrast severity badge text, reduced-motion honored.
+  all controls, semantic `<table>` with sortable headers, AA-contrast severity badge text,
+  reduced-motion honored.
+
+## Anti-Patterns (Do Not Add)
+These patterns make the interface look AI-generated rather than designed:
+- ❌ Gradient logo backgrounds (`bg-gradient-to-br from-X via-Y to-Z`)
+- ❌ `font-mono uppercase tracking-wider` on navigation labels
+- ❌ `animate-pulse` on status dots
+- ❌ "SECURITY ANALYTICS" or similar self-labeling badges
+- ❌ `border-t-2 border-t-primary` accent bars on cards
+- ❌ Cyber glow `drop-shadow` on chart hover
+- ❌ Background dot grids (`radial-gradient` patterns on body)
+- ❌ `hover:border-primary/40` glow borders
+- ❌ `backdrop-blur` on fixed headers (expensive, no visual benefit)
 
 ## Decisions Log
 | Date | Decision | Rationale |
 |------|----------|-----------|
-| 2026-07-14 | Premium SaaS direction (Linear/Vercel/Stripe) | User asked for a senior-product-designer look; replaces terminal concept |
-| 2026-07-14 | Light + dark toggle | Vercel/Stripe ship both; broadest fit |
-| 2026-07-14 | Tailwind CSS v4 + `@tailwindcss/vite` | Modern tooling, CSS-first tokens, `color-mix` opacity |
+| 2026-07-14 | Premium SaaS direction (Linear/Vercel/Stripe) | User asked for a senior-product-designer look |
+| 2026-07-14 | Light + dark toggle | Broadest fit for security professionals |
+| 2026-07-14 | Tailwind CSS v4 + `@tailwindcss/vite` | Modern tooling, CSS-first tokens |
 | 2026-07-14 | shadcn/ui on Radix | Accessible, composable, premium baseline |
 | 2026-07-14 | Framer Motion, subtle only | Motion as feedback, not spectacle |
 | 2026-07-14 | Inter (UI) + JetBrains Mono (data) | Clear hierarchy; mono keeps numbers aligned |
-| 2026-07-14 | Indigo/violet brand, severity colors reserved | Accent stays meaningful; data stays loud |
+| 2026-08-01 | Deep teal primary, warm stone neutrals | Replaces cold indigo/cyan; distinctive without being decorative |
+| 2026-08-01 | Strip all AI slop patterns | Removed gradients, pulse dots, mono nav, cyber glows, badge labels |
+| 2026-08-01 | Anti-patterns section | Explicit list of patterns to avoid so future changes don't regress |
+| 2026-08-01 | Dark-mode contrast pass | Raised card/popover elevation, AA-clean muted text, visible borders, `color-scheme: dark`; fixes muddy-brown, flat surfaces |

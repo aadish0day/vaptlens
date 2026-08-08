@@ -65,35 +65,35 @@ export function KpiCardWidget({ widget, filtered, onSelect, activeCrossFilters }
       return SEVERITY_HEX[widget.title as keyof typeof SEVERITY_HEX];
     }
     if (widget.groupBy === "slaStatus") {
-      return widget.title === "Breached" ? "#E5484D" : "#46A758";
+      return widget.title === "Breached" ? "#DC2626" : "#059669";
     }
     if (widget.groupBy === "lifecycle") {
-      if (widget.title === "Fixed") return "#46A758";
-      if (widget.title === "New") return "#818CF8";
-      return "#F2994A";
+      if (widget.title === "Fixed") return "#059669";
+      if (widget.title === "New") return "#6366F1";
+      return "#EA580C";
     }
     if (widget.groupBy === "isExploitable") {
-      return widget.title === "Exploitable" ? "#F2994A" : dark ? "#98A2B3" : "#6B7280";
+      return widget.title === "Exploitable" ? "#EA580C" : dark ? "#A8A29E" : "#78716C";
     }
     if (widget.groupBy === "isZeroDay") {
-      return widget.title === "Zero-day" ? "#E5484D" : dark ? "#98A2B3" : "#6B7280";
+      return widget.title === "Zero-day" ? "#DC2626" : dark ? "#A8A29E" : "#78716C";
     }
     if (widget.groupBy === "isEol") {
-      return widget.title === "EOL/Obsolete" ? "#F2994A" : dark ? "#98A2B3" : "#6B7280";
+      return widget.title === "EOL/Obsolete" ? "#EA580C" : dark ? "#A8A29E" : "#78716C";
     }
     if (widget.groupBy === "unpatchedAge") {
-      return widget.title === "Unpatched > 6 Months" ? "#F2994A" : dark ? "#98A2B3" : "#6B7280";
+      return widget.title === "Unpatched > 6 Months" ? "#EA580C" : dark ? "#A8A29E" : "#78716C";
     }
     if (widget.groupBy === "agingBucket") {
-      if (widget.title === "0–30 Days" || widget.title === "Remediated") return "#46A758";
-      if (widget.title === "31–90 Days") return "#818CF8";
-      if (widget.title === "91–180 Days") return "#F2994A";
-      if (widget.title === "180+ Days") return "#E5484D";
+      if (widget.title === "0–30 Days" || widget.title === "Remediated") return "#059669";
+      if (widget.title === "31–90 Days") return "#0D9488";
+      if (widget.title === "91–180 Days") return "#EA580C";
+      if (widget.title === "180+ Days") return "#DC2626";
     }
     if (widget.groupBy === "owaspCategory") {
-      return "#8B5CF6";
+      return "#7C3AED";
     }
-    return dark ? "#E7EAF0" : "#14181F";
+    return dark ? "#E7E5E4" : "#1C1917";
   }, [widget.groupBy, widget.title, isSeverityKpi, dark]);
 
   const isFilterActive = useMemo(() => {
@@ -127,7 +127,7 @@ export function KpiCardWidget({ widget, filtered, onSelect, activeCrossFilters }
       >
         {formatted}
       </div>
-      <div className="mt-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+      <div className="mt-1.5 text-[11px] font-medium text-muted-foreground flex items-center gap-1.5">
         {matchingValue && (
           <span
             className="h-1.5 w-1.5 rounded-full bg-primary"

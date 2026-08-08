@@ -118,7 +118,7 @@ export function UploadZone() {
           "group flex cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed px-4 py-7 text-center transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
           dragOver
             ? "border-primary bg-primary-soft"
-            : "border-border bg-card hover:border-primary/50 hover:bg-accent/40"
+            : "border-border bg-card hover:border-foreground/20 hover:bg-accent/40"
         )}
       >
         <div
@@ -134,7 +134,7 @@ export function UploadZone() {
           <span className="text-primary">browse</span>
         </p>
         <p className="mt-1 text-[11px] text-muted-foreground">
-          Nessus · OpenVAS · Qualys · Burp · ZAP · Nikto · generic
+Nessus · OpenVAS · Qualys · Burp · ZAP · Nikto · Acunetix · Wapiti · nuclei · Dependency-Check · generic
         </p>
         <input
           ref={inputRef}
@@ -174,7 +174,7 @@ export function UploadZone() {
 
       {batches.length > 0 && (
         <div className="space-y-1.5">
-          <div className="flex items-center gap-1.5 px-0.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+          <div className="flex items-center gap-1.5 px-0.5 text-xs font-medium text-muted-foreground">
             <CheckCircle2 className="h-3.5 w-3.5 text-success" />
             {batches.length} {batches.length === 1 ? "batch" : "batches"} ·{" "}
             {findings.length.toLocaleString()} findings
@@ -183,7 +183,7 @@ export function UploadZone() {
             {batches.map((b) => (
               <li
                 key={b.id}
-                className="group flex items-center gap-2 rounded-lg border border-border bg-card px-2.5 py-1.5 shadow-sm transition-colors hover:border-primary/40"
+                className="group flex items-center gap-2 rounded-lg border border-border bg-card px-2.5 py-1.5 shadow-sm transition-colors hover:border-foreground/20"
               >
                 <FileText className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                 <input

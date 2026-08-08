@@ -84,6 +84,58 @@ const PRESETS: ToolPreset[] = [
       pluginId: "OSVDB",
     },
   },
+  {
+    name: "Acunetix",
+    signatures: ["Vulnerability", "CVSS3", "CWE", "CVE", "Solution", "Plugin"],
+    mapping: {
+      host: "Host",
+      severity: "Severity",
+      cvss: "CVSS3",
+      cve: "CVE",
+      name: "Vulnerability",
+      description: "Description",
+      solution: "Solution",
+      port: "Port",
+      pluginId: "Plugin",
+    },
+  },
+  {
+    name: "Wapiti",
+    // Wapiti's CSV export has no host column, so findings default to
+    // "unknown-host" — remap manually in the column mapper if needed.
+    signatures: ["module", "http_request", "http_response", "wstg", "references", "cwe"],
+    mapping: {
+      severity: "severity",
+      name: "name",
+      description: "description",
+      solution: "solution",
+      cve: "cwe",
+    },
+  },
+  {
+    name: "nuclei",
+    // Flattened JSONL exports (e.g. jq [.template-id, .info.name, ...])
+    signatures: ["template-id", "info.name", "info.severity", "matched-at", "matcher-name"],
+    mapping: {
+      host: "host",
+      port: "port",
+      name: "info.name",
+      severity: "info.severity",
+      url: "url",
+      pluginId: "template-id",
+    },
+  },
+  {
+    name: "OWASP Dependency-Check",
+    signatures: ["Vulnerable Software", "CVSSv2", "CVSSv3", "CWE", "Notes", "References"],
+    mapping: {
+      name: "Vulnerable Software",
+      severity: "Severity",
+      cvss: "CVSSv3",
+      cve: "CVE",
+      description: "Description",
+    },
+  },
 ];
 
 export function detectTool(headers: string[]): DetectionResult | null {

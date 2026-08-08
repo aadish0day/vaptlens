@@ -4,8 +4,9 @@ import { applyFilters } from "../lib/aggregate";
 import type { Finding } from "../lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Badge } from "./ui/badge";
-import { Shield, Zap, Target, Sliders, Calendar } from "lucide-react";
+import { Shield, Zap, Target, Sliders, Calendar, Filter } from "lucide-react";
 import { SeverityBadge } from "./severity-badge";
+import { cn } from "../lib/utils";
 
 type QuadrantId = "quick_wins" | "strategic" | "mundane" | "deferrable";
 
@@ -17,7 +18,15 @@ interface PrioritizedFinding extends Finding {
 export function PrioritizationMatrix() {
   const findings = useDashboardStore((s) => s.findings);
   const filters = useDashboardStore((s) => s.filters);
+  const toggleCrossFilter = useDashboardStore((s) => s.toggleCrossFilter);
+  const crossFilters = useDashboardStore((s) => s.filters.crossFilters);
   const [selectedQuadrant, setSelectedQuadrant] = useState<QuadrantId | null>(null);
+
+  const isHostFiltered = (host: string) =>
+    crossFilters.some((cf) => cf.field === "host" && cf.value === host);
+
+  const isSeverityFiltered = (sev: string) =>
+    crossFilters.some((cf) => cf.field === "severity" && cf.value === sev);
 
   // Apply active global filters, excluding Fixed placeholders
   const filteredFindings = useMemo(() => {
@@ -114,12 +123,12 @@ export function PrioritizationMatrix() {
         <CardContent className="p-3">
           <div className="relative grid grid-cols-2 gap-3 rounded-xl bg-border/20 p-3 max-w-[640px] mx-auto">
             {/* Y-Axis Label (Severity / Risk) */}
-            <div className="absolute -left-6 top-1/2 -translate-y-1/2 -rotate-90 select-none text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            <div className="absolute -left-6 top-1/2 -translate-y-1/2 -rotate-90 select-none text-[11px] font-semibold text-muted-foreground">
               Vulnerability Risk (CVSS) →
             </div>
 
             {/* X-Axis Label (Remediation Effort) */}
-            <div className="absolute -bottom-5 left-1/2 -translate-x-1/2 select-none text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            <div className="absolute -bottom-5 left-1/2 -translate-x-1/2 select-none text-[11px] font-semibold text-muted-foreground">
               Remediation Effort →
             </div>
 
@@ -237,12 +246,33 @@ export function PrioritizationMatrix() {
 
               <div className="space-y-2.5">
                 {activeList.map((f: PrioritizedFinding) => (
-                  <div 
-                    key={f.id} 
-                    className="rounded-xl border border-border bg-card/60 p-3.5 space-y-3 text-xs hover:border-primary/25 hover:-translate-y-0.5 hover:shadow-lg transition-all duration-200"
+                  <div
+                    key={f.id}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => toggleCrossFilter("host", f.host)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        toggleCrossFilter("host", f.host);
+                      }
+                    }}
+                    title="Click to cross-filter the dashboard by this host"
+                    aria-pressed={isHostFiltered(f.host)}
+                    className={cn(
+                      "cursor-pointer select-none rounded-xl border p-3.5 space-y-3 text-xs transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                      isHostFiltered(f.host)
+                        ? "border-primary/50 bg-primary-soft ring-1 ring-primary/30"
+                        : "border-border bg-card/60 hover:border-foreground/20 hover:-translate-y-0.5 hover:shadow-lg"
+                    )}
                   >
                     <div className="flex items-center justify-between gap-2">
-                      <SeverityBadge severity={f.severity} />
+                      <SeverityBadge
+                        severity={f.severity}
+                        onClick={() => toggleCrossFilter("severity", f.severity)}
+                        ariaPressed={isSeverityFiltered(f.severity)}
+                        title="Click to cross-filter the dashboard by this severity"
+                      />
                       <div className="flex items-center gap-1.5">
                         {f.cvss !== undefined && (
                           <span className="font-mono text-[10px] font-bold text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
@@ -257,6 +287,25 @@ export function PrioritizationMatrix() {
                         IP: {f.host}
                       </p>
                     </div>
+                    {/* Cross-filter hint */}
+                    <div className="flex flex-wrap items-center justify-between gap-1 border-t border-border/30 pt-2.5 mt-2 text-[9px] font-medium">
+                      <span
+                        className={cn(
+                          "flex items-center gap-1",
+                          isHostFiltered(f.host) || isSeverityFiltered(f.severity)
+                            ? "text-primary"
+                            : "text-muted-foreground"
+                        )}
+                      >
+                        <Filter className="h-3 w-3" />
+                        {isHostFiltered(f.host)
+                          ? "Filtering by host — click card to remove"
+                          : isSeverityFiltered(f.severity)
+                            ? `Filtering by ${f.severity} — click badge to remove`
+                            : "Click card: host · badge: severity"}
+                      </span>
+                    </div>
+
                     {/* Visual Effort Gauge */}
                     <div className="space-y-1 border-t border-border/30 pt-2.5 mt-2">
                       <div className="flex items-center justify-between text-[9px] text-muted-foreground font-mono">

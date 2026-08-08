@@ -1,92 +1,87 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
-/* ---------------------------------------------------------------------------
-   Dark mode is class-based (.dark on <html>), toggled by ThemeProvider.
---------------------------------------------------------------------------- */
 @custom-variant dark (&:is(.dark *));
 
 /* ---------------------------------------------------------------------------
-   Design tokens — premium SaaS, light + dark.
-   Light: airy white surfaces, indigo/violet brand, precise neutral grays.
-   Dark:  deep slate canvas, lifted surfaces, luminous brand.
+   Design tokens — Clean enterprise data platform.
+   Light: Warm stone surfaces, deep teal accent, quiet borders.
+   Dark:  Near-black warm canvas, elevated warm-gray panels, teal accent.
 --------------------------------------------------------------------------- */
 :root {
-  --radius: 0.75rem;
+  color-scheme: light;
+  --radius: 0.5rem;
 
-  --background: 220 24% 97%;
-  --foreground: 222 33% 12%;
+  --background: 40 6% 97%;
+  --foreground: 20 14% 10%;
 
   --card: 0 0% 100%;
-  --card-foreground: 222 33% 12%;
+  --card-foreground: 20 14% 10%;
 
   --popover: 0 0% 100%;
-  --popover-foreground: 222 33% 12%;
+  --popover-foreground: 20 14% 10%;
 
-  --primary: 245 71% 59%;
+  --primary: 175 77% 26%;
   --primary-foreground: 0 0% 100%;
 
-  --secondary: 220 18% 93%;
-  --secondary-foreground: 222 30% 20%;
+  --secondary: 40 6% 93%;
+  --secondary-foreground: 20 14% 18%;
 
-  --muted: 220 18% 93%;
-  --muted-foreground: 220 12% 44%;
+  --muted: 40 5% 92%;
+  --muted-foreground: 20 5% 46%;
 
-  --accent: 220 18% 92%;
-  --accent-foreground: 222 30% 20%;
+  --accent: 40 6% 93%;
+  --accent-foreground: 20 14% 14%;
 
   --destructive: 0 72% 51%;
   --destructive-foreground: 0 0% 100%;
 
   --success: 152 56% 40%;
 
-  --border: 220 16% 89%;
-  --input: 220 16% 89%;
-  --ring: 245 71% 59%;
+  --border: 30 6% 87%;
+  --input: 30 6% 87%;
+  --ring: 175 77% 26%;
 
-  --sidebar: 222 28% 99%;
-  --sidebar-foreground: 222 33% 12%;
+  --sidebar: 40 6% 98%;
+  --sidebar-foreground: 20 14% 10%;
 }
 
 .dark {
-  --background: 224 28% 6%;
-  --foreground: 220 22% 92%;
+  color-scheme: dark;
+  --background: 20 8% 6%;
+  --foreground: 30 10% 90%;
 
-  --card: 223 25% 10%;
-  --card-foreground: 220 22% 92%;
+  --card: 20 8% 13%;
+  --card-foreground: 30 10% 92%;
 
-  --popover: 223 25% 10%;
-  --popover-foreground: 220 22% 92%;
+  --popover: 20 8% 16%;
+  --popover-foreground: 30 10% 92%;
 
-  --primary: 245 84% 68%;
-  --primary-foreground: 224 45% 9%;
+  --primary: 172 66% 50%;
+  --primary-foreground: 20 10% 7%;
 
-  --secondary: 222 20% 16%;
-  --secondary-foreground: 220 20% 88%;
+  --secondary: 20 8% 18%;
+  --secondary-foreground: 30 8% 90%;
 
-  --muted: 222 18% 15%;
-  --muted-foreground: 220 13% 62%;
+  --muted: 20 8% 17%;
+  --muted-foreground: 20 6% 62%;
 
-  --accent: 222 20% 17%;
-  --accent-foreground: 220 20% 90%;
+  --accent: 20 8% 19%;
+  --accent-foreground: 30 8% 93%;
 
   --destructive: 0 70% 58%;
   --destructive-foreground: 0 0% 100%;
 
   --success: 152 52% 50%;
 
-  --border: 222 18% 18%;
-  --input: 222 18% 22%;
-  --ring: 245 84% 68%;
+  --border: 20 6% 26%;
+  --input: 20 6% 26%;
+  --ring: 172 66% 50%;
 
-  --sidebar: 224 30% 8%;
-  --sidebar-foreground: 220 22% 92%;
+  --sidebar: 20 8% 9%;
+  --sidebar-foreground: 30 10% 90%;
 }
 
-/* ---------------------------------------------------------------------------
-   Map tokens into Tailwind's theme so `bg-card`, `text-muted-foreground`,
-   `rounded-lg`, `font-mono`, etc. all resolve to the variables above.
---------------------------------------------------------------------------- */
 @theme inline {
   --color-background: hsl(var(--background));
   --color-foreground: hsl(var(--foreground));
@@ -112,8 +107,8 @@
   --color-sidebar-foreground: hsl(var(--sidebar-foreground));
 
   --radius-lg: var(--radius);
-  --radius-md: calc(var(--radius) - 0.25rem);
-  --radius-sm: calc(var(--radius) - 0.375rem);
+  --radius-md: calc(var(--radius) - 0.125rem);
+  --radius-sm: calc(var(--radius) - 0.25rem);
 
   --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
@@ -136,7 +131,6 @@
     text-rendering: optimizeLegibility;
   }
 
-  /* Visible, consistent focus ring for keyboard users only. */
   :focus-visible {
     outline: none;
     box-shadow:
@@ -146,33 +140,28 @@
   }
 }
 
-/* ---------------------------------------------------------------------------
-   Elevation system — layered, low-contrast shadows (premium, not flat).
---------------------------------------------------------------------------- */
 @layer utilities {
   .shadow-card {
     box-shadow:
-      0 1px 2px rgb(16 24 40 / 0.04),
-      0 1px 3px rgb(16 24 40 / 0.06);
+      0 1px 2px rgb(0 0 0 / 0.04),
+      0 1px 3px rgb(0 0 0 / 0.06);
   }
   .shadow-pop {
     box-shadow:
-      0 4px 6px -2px rgb(16 24 40 / 0.04),
-      0 12px 16px -4px rgb(16 24 40 / 0.10);
+      0 4px 6px -2px rgb(0 0 0 / 0.05),
+      0 12px 16px -4px rgb(0 0 0 / 0.10);
   }
   .dark .shadow-card {
     box-shadow:
-      0 1px 2px rgb(0 0 0 / 0.30),
-      0 1px 3px rgb(0 0 0 / 0.40);
+      0 1px 2px rgb(0 0 0 / 0.20),
+      0 1px 3px rgb(0 0 0 / 0.28);
   }
   .dark .shadow-pop {
     box-shadow:
-      0 8px 24px -6px rgb(0 0 0 / 0.55),
-      0 2px 6px -2px rgb(0 0 0 / 0.45);
+      0 8px 24px -6px rgb(0 0 0 / 0.40),
+      0 2px 6px -2px rgb(0 0 0 / 0.32);
   }
 
-  /* Soft accent washes — opacity modifiers don't compose with var() colors,
-     so we expose explicit tint utilities instead. */
   .bg-primary-soft {
     background-color: hsl(var(--primary) / 0.1);
   }
@@ -187,9 +176,7 @@
   }
 }
 
-/* ---------------------------------------------------------------------------
-   react-grid-layout — quiet, on-brand drag/resize affordances.
---------------------------------------------------------------------------- */
+/* react-grid-layout */
 .react-grid-item.react-grid-placeholder {
   background: hsl(var(--primary)) !important;
   opacity: 0.12;
@@ -212,8 +199,8 @@
 }
 .react-grid-item.react-draggable-dragging .widget-shell {
   box-shadow:
-    0 12px 32px -8px rgb(16 24 40 / 0.25),
-    0 4px 12px -4px rgb(16 24 40 / 0.18);
+    0 12px 32px -8px rgb(0 0 0 / 0.18),
+    0 4px 12px -4px rgb(0 0 0 / 0.12);
 }
 .dark .react-grid-item.react-draggable-dragging .widget-shell {
   box-shadow: 0 16px 40px -8px rgb(0 0 0 / 0.6);
@@ -246,9 +233,6 @@
   background: transparent;
 }
 
-/* ---------------------------------------------------------------------------
-   Interactive charts — cursor pointers and hover states for Recharts.
---------------------------------------------------------------------------- */
 .recharts-bar-rectangle,
 .recharts-pie-sector,
 .recharts-sector,

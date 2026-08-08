@@ -68,7 +68,7 @@ export function HeatmapWidget({ widget, filtered, onSelect }: ChartProps) {
         {SEVERITIES.map((s) => (
           <div
             key={s}
-            className="flex items-center justify-center gap-1 pb-1 font-medium uppercase tracking-wide"
+            className="flex items-center justify-center gap-1 pb-1 font-medium"
             style={{ color: severityBadge(s, dark).text }}
           >
             <span

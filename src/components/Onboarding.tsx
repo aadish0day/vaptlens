@@ -95,7 +95,7 @@ export function Onboarding() {
         transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
         className="w-full max-w-2xl text-center"
       >
-        <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-primary to-[#8B5CF6] text-white shadow-lg shadow-primary/20">
+        <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm">
           <ShieldCheck className="h-8 w-8" />
         </div>
         <h2 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
@@ -157,7 +157,7 @@ export function Onboarding() {
                 "group flex cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed p-4 text-center transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                 dragOver
                   ? "border-primary bg-primary-soft"
-                  : "border-border bg-accent/20 hover:border-primary/50 hover:bg-accent/40"
+                  : "border-border bg-accent/20 hover:border-foreground/20 hover:bg-accent/40"
               )}
             >
               <UploadCloud className="h-6 w-6 text-muted-foreground group-hover:text-primary transition-colors" />
