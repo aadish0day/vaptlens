@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 import { Root } from "@/app/shell/Root";
 import { canvasToPdfBlob, captureCanvas } from "@/app/lib/export";
 import { AUTH } from "@/lib/auth";
-import { IDB, P, VAULT, WS } from "@/lib/store";
+import { IDB, P, WS } from "@/lib/store";
 import { runSelfTests } from "@/lib/engine";
 import "@/styles/fonts.css";
 import "@/styles/tokens.css";
@@ -20,18 +20,19 @@ import "@/styles/app.css";
   } catch (e) {}
 })();
 
-/* hooks used by the end-to-end tests */
-window.__vlTest = {
-  captureCanvas: captureCanvas,
-  canvasToPdfBlob: canvasToPdfBlob,
-};
-window.__vl = {
-  AUTH: AUTH,
-  IDB: IDB,
-  P: P,
-  VAULT: VAULT,
-  WS: WS,
-  runSelfTests: runSelfTests,
-};
+/* hooks used by the end-to-end tests: dev server, or a build made with VITE_E2E=1; never in a normal production build */
+if ((import.meta as any).env.DEV || (import.meta as any).env.VITE_E2E === "1") {
+  window.__vlTest = {
+    captureCanvas: captureCanvas,
+    canvasToPdfBlob: canvasToPdfBlob,
+  };
+  window.__vl = {
+    AUTH: AUTH,
+    IDB: IDB,
+    P: P,
+    WS: WS,
+    runSelfTests: runSelfTests,
+  };
+}
 
 createRoot(document.getElementById("root")!).render(<Root />);

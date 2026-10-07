@@ -65,12 +65,29 @@ VAPTLens is a zero-trust, client-side vulnerability analytics workbench. The int
 - Three cuts of one superfamily. **IBM Plex Sans Condensed** (500–700) for display: view titles, KPI and threat-index numbers, drawer titles. **IBM Plex Sans** (variable) for all running UI text. **IBM Plex Mono** (400–600) for panel headers, labels, hosts, IDs and code.
 - Scale: `kpi` 36/40 condensed · `title-lg` 28/32 condensed · `title` 18/24 condensed · `body` 14/22 · `body-sm` 13/20 (default) · `body-strong` 13/20 500 · `caption` 12/16 · `card-title` mono 11/16 +0.08em uppercase · `label` mono 10.5/14 +0.1em uppercase · `mono` 13/20 · `mono-sm` 12/16 · `code` 12.5/20.
 - Numbers: tabular figures everywhere digits stack. Mono text turns on slashed zero (`"zero"`), so `10.100.0.10` never reads as O.
-- Weights: 400 body, 500 emphasis, 600 headers and numbers. Never below 10.5px, and only the uppercase mono labels go that small.
+- Weights: 400 body, 500 emphasis, 600 headers and numbers. Running text never goes below 12px; 10.5px is only for the uppercase mono labels, and 10px (`text-2xs`) only for chart ticks and tiny chip text.
+- Size tokens (CSS): `--text-2xs` 10 · `--text-xs` 11 · `--text-sm` 12 · `--text-base` 13 (default) · `--text-md` 14 · `--text-lg` 16 · `--text-xl` 18 · `--text-2xl` 20 · `--text-3xl` 22 · `--text-4xl` 24 · `--text-5xl` 28 · `--text-6xl` 32 · `--text-7xl` 36 · `--text-8xl` 40 · `--text-9xl` 44, plus `--text-label` 10.5, `--text-code` 12.5 and `--text-watermark` 96. Line heights `--leading-*` (14 · 16 · 18 · 20 · 22 · 24 · 32 · 40, or `none`), weights `--weight-regular/medium/semibold/bold`, tracking `--tracking-tight/normal/caps/label`.
+- Each named style above is also a font shorthand: `font: var(--type-body-sm);` (likewise `--type-kpi`, `--type-title-lg`, `--type-title`, `--type-body`, `--type-body-strong`, `--type-caption`, `--type-card-title`, `--type-label`, `--type-mono`, `--type-mono-sm`, `--type-code`). Set uppercase tracking separately. Prefer these in new components.
 
 ## Space, shape, elevation
 
 - A 4pt grid: `space-0` 0 · `space-0.5` 2 · `space-1` 4 · `space-1.5` 6 · `space-2` 8 · `space-2.5` 10 · `space-3` 12 · `space-4` 16 · `space-5` 20 · `space-6` 24 · `space-7` 28 · `space-8` 32 · `space-10` 40 · `space-12` 48 · `space-16` 64 · `space-20` 80. Half steps are for dense data UI only; layout gaps use whole steps.
-- Rhythm: panel padding `space-5` (header and body share it, so content aligns under the title), panel gutter `space-4`, section gap `space-6`, view side padding `space-8` (`space-4` on phones).
+- Rhythm comes from **spacing roles**, not raw steps. Every layout and component inset uses one of these, and density or breakpoints change the role, never the component rule:
+
+  | Role | Value | Used for |
+  | --- | --- | --- |
+  | `--page-pad-top` / `--page-pad-x` / `--page-pad-bottom` | 24 / 32 / 48 (16 / 16 / 48 below 1024; side 40 from 1600) | The view's outer padding |
+  | `--gap-section` | 16 | Between page sections: header, grids, full-width cards |
+  | `--gap-grid` | 16 | Between cards in a grid; the dashboard grid margin matches it |
+  | `--gap-stack` | 16 | Stacked blocks inside a section |
+  | `--gap-inline` | 8 | Inline controls: page actions, chip rows, filter rows |
+  | `--gap-tight` | 4 | Icon to label, tag to tag |
+  | `--inset-card` | 20 (compact 12, comfortable 24) | Card body **and** card title, so content always aligns under the title |
+  | `--inset-card-end` | 12 | Card header end, where the action buttons sit |
+  | `--inset-overlay` | 20 | Modal and drawer head, body and footer sides |
+  | `--inset-cell` | 16 | Table cell sides; a bleed table (`.table-bleed`) aligns its outer cells to `--inset-card` |
+
+- A card body's first content starts `--inset-card` below the header rule. Lists and tables that run edge to edge (`.table-bleed`, the hosts list) are the only flush exceptions. An empty card shows an `EmptyState`, never a bare body.
 - Radii nest (inner = outer − padding): `radius-overlay` (`radius-xl` 14) on modals, drawers and popovers; `radius-card` (`radius-lg` 10) on panels, tiles and table wrappers; `radius-control` (`radius-md` 6) on buttons, inputs, menu items and rail items; `radius-badge` (`radius-sm` 4) on badges, chips, checkboxes and kbd keys; `radius-xs` 2 on chart bars, progress fills and tiny marks; `radius-full` on pills, dots, meters and toggles. `radius-2xl` 20 is for large feature surfaces only. Never put a larger radius inside a smaller one.
 - Elevation is five steps: `shadow-xs` (pressed, inset tracks) · `shadow-sm` (resting cards; alias `shadow-card`) · `shadow-md` (hover, dragged, scrolled sticky; alias `shadow-raised`) · `shadow-lg` (menus, popovers, toasts, tooltips; alias `shadow-popover`) · `shadow-xl` (drawers, modals; alias `shadow-overlay`). Dark themes pair a 1px top highlight with layered negative-spread drops; light themes use cool-tinted soft layers; `hc` swaps shadows for solid white outlines. `shadow-focus` is the soft halo on focused inputs; `ring-inset` and `ring-signal` draw hairlines without moving layout.
 - Layers (z-index, spaced by 100 so local +1…+99 never crosses a layer): `z-grid` 1 · `z-raised` 2 · `z-sticky` 100 · `z-drag` 150 · `z-header` 200 · `z-dropdown` 300 · `z-drawer` 400 · `z-modal` 500 · `z-popover` 600 · `z-toast` 700 · `z-tooltip` 800 · `z-skip` 900. Never write a raw z-index above 9.
@@ -92,17 +109,27 @@ VAPTLens is a zero-trust, client-side vulnerability analytics workbench. The int
 - Layout: a 232px left rail (views numbered 1–8, which are also keyboard shortcuts), a 40px status strip (LOCAL LED, scan count, active, breached, threat index, reference date), then the view. Below `bp-md` the rail becomes a scrolling top bar.
 - Permission gating uses `aria-disabled` plus a tooltip (`Button restricted`), never native `disabled`. Native `disabled` (at `opacity-disabled`) is only for impossible actions, such as moving a card past the board's last column.
 - Motion is functional only:
-  - Tokens: `duration-instant` 80 · `duration-fast` 120 · `duration-base` 180 · `duration-slow` 280; `ease-standard` cubic-bezier(.2,0,0,1), `ease-out` cubic-bezier(.16,1,.3,1) for entering, `ease-in` for leaving.
+  - Tokens: `duration-instant` 80 · `duration-fast` 120 · `duration-base` 180 · `duration-slow` 280 · `duration-slower` 400 (large expansion, important notices) · `duration-dim` 700 (background dimming); loops `duration-loop-fast` 800 (spinner) · `duration-loop` 1400 (pulse, skeleton, indeterminate bars) · `duration-loop-slow` 2400 (status LED). Easing `ease-standard` cubic-bezier(.2,0,0,1), `ease-out` cubic-bezier(.16,1,.3,1) for entering, `ease-in` or `ease-exit` cubic-bezier(.2,0,1,.9) for leaving. The ladder follows Carbon's productive motion.
+  - Never `transition: all`; list the properties.
   - `duration-fast` for color and opacity changes.
   - `duration-slow` + `ease-out` for a modal rising 8px or a drawer sliding 24px; menus and popovers pop in over `duration-base`; the scrim fades and blurs 2px.
   - 1.4s skeleton pulse and the Network Map's link-dash pulse.
   - No bounce and no parallax. Everything drops to instant under `prefers-reduced-motion`.
 - Loading: show `Skeleton` after 150ms of work, nothing before. Toasts auto-dismiss after 5s, except errors.
 
+## Token governance
+
+- `design/tokens.json` is the source of truth and `src/styles/tokens.css` mirrors it. Change both together.
+- Component CSS (`app.css`, `ui.css`, `ui-extra.css`) uses tokens only. `npm run lint:tokens` runs at the start of `npm run build` and fails on raw colours, raw px font sizes, `transition: all`, z-index values of 10 or more, raw animation durations, and media-query breakpoints off the scale (479/480, 767/768, 1023/1024, 1279/1280, 1599/1600, plus the documented dashboard content breakpoints 1320/1440/1500).
+- Theme-independent colours: `--paper-*` for the report (always printed on white) and `--on-avatar`. Avatar hues use `hsl(h 45% 32%)` so white initials keep at least 4.5:1 on every hue.
+- Recurring inline sizes: `--chip-height` 22 and `--count-height` 16. Composed rings: `--ring-offset`, `--shadow-focus-soft`, `--highlight-inset(-soft)`.
+- `npm run tokens:dtcg` writes `design/tokens.dtcg.json` in the W3C Design Tokens format (2025.10). Dark is the default value and the other 16 themes sit under `$extensions["com.vaptlens.themes"]`; shadows stay CSS-only. Use it to feed Tokens Studio, Style Dictionary or Figma variables.
+
 ## Iconography
 
 - Lucide, 2px stroke, `currentColor`, at 16px (12px in tags and badges, 14px in small controls). The Icons group has the view and threat mapping.
 - The logo is still a placeholder reticle (Logos group). The Logo options group holds four candidate marks to choose from.
+- App icons in `public/`: `favicon.svg`, `apple-touch-icon.png` (180, opaque), `icon-192.png`, `icon-512.png`, `icon-maskable-512.png` (12% safe zone), listed in `manifest.webmanifest`. `<meta name="theme-color">` follows the system theme and is overridden with the chosen theme's `--canvas` when a user picks one.
 
 ## Reports
 

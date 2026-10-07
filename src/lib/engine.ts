@@ -12,6 +12,7 @@ import {
   subnetOf,
 } from "@/lib/data";
 import {
+  hostOf,
   imageName,
   isoDay,
   num,
@@ -498,6 +499,7 @@ export function vecTotalImpact(pv) {
 
 /* ===== asset context ===== */
 export function isPrivate(host) {
+  host = String(host || "").replace(/^\[|\]$/g, "");
   if (/:/.test(host) && !/\./.test(host))
     return /^(fc|fd|fe8|fe9|fea|feb)|^::1$/i.test(host);
   return (
@@ -978,11 +980,53 @@ export function enrich(f) {
      - "Fixed" rows in the first later scan that covered the host but no longer saw the issue
      - "Not re-scanned" carry-overs when a later scan didn't cover the host (never assumed fixed)
      - lifecycle New / Open / Reopened, firstSeen, slaStart, fixedAt, reopenCount */
+/* Two different scanners reporting the same CVE set on the same host:port are one issue. Their fingerprints differ
+   (each prefers its own rule ID), so map the later source's key onto the key first seen (in batch order): the first
+   key keeps its governance, and the merged finding lists both tools. Web findings keep their path-based keys, and two
+   checks from the SAME scanner stay separate. */
+export function crossSourceAliases(rows) {
+  var first = {},
+    alias = {};
+  rows.forEach(function (x) {
+    if (!x.cves || !x.cves.length || familyOf(x.tool) === "web") return;
+    var k = x.key || fingerprint(x),
+      src = sourceOf(x.tool),
+      corr =
+        String(x.host || "").toLowerCase() +
+        "|" +
+        (x.port || "") +
+        "|" +
+        x.cves
+          .map(function (c) {
+            return String(c).toUpperCase();
+          })
+          .sort()
+          .join(",");
+    var g = first[corr];
+    if (!g) first[corr] = { key: k, src: src };
+    else if (g.key !== k && g.src !== src && !alias[k]) alias[k] = g.key;
+  });
+  return alias;
+}
+
 export function runEngine(raw, batches, env?) {
   env = env || {};
   var order = batches.slice().sort(function (a, b) {
     return a.date < b.date ? -1 : a.date > b.date ? 1 : a.id - b.id;
   });
+  var bPos = {};
+  order.forEach(function (b, i) {
+    bPos[b.id] = i;
+  });
+  var keyAlias = crossSourceAliases(
+    raw
+      .filter(function (x) {
+        return x.batch in bPos;
+      })
+      .sort(function (a, b) {
+        return bPos[a.batch] - bPos[b.batch];
+      }),
+  );
   var bById = {};
   order.forEach(function (b) {
     bById[b.id] = b;
@@ -994,6 +1038,7 @@ export function runEngine(raw, batches, env?) {
     if (!bById[x.batch]) return;
     if (x.host) x.host = String(x.host).toLowerCase();
     var k = x.key || fingerprint(x);
+    k = keyAlias[k] || k;
     var bb = (byBatch[x.batch] = byBatch[x.batch] || {});
     var ex = bb[k];
     if (!ex)
@@ -1897,6 +1942,82 @@ SELF_TESTS.push(
   ],
 );
 
+/* audit fixes (2026-10-07): cross-scanner dedup, dates, severities, VEX scope, IPv6 hosts, heuristics */
+SELF_TESTS.push(
+  [
+    "Dedup: Nessus + OpenVAS with the same CVE on one host:port are one finding with both tools",
+    function () {
+      var r = runEngine(
+        [
+          { batch: 1, host: "10.0.0.5", port: "443", name: "Log4j RCE", sev: "critical", cvss: 10, cves: ["CVE-2021-44228"], pluginId: "nessus:156014", tool: "Nessus" },
+          { batch: 1, host: "10.0.0.5", port: "443", name: "Apache Log4j RCE", sev: "critical", cvss: 10, cves: ["CVE-2021-44228"], pluginId: "oid:1.3.6.1.4.1.25623.1.0.117825", tool: "OpenVAS" },
+        ],
+        [{ id: 1, date: "2026-01-10", full: false }],
+      );
+      var rows = r.data.filter(function (x) {
+        return x.batch === 1;
+      });
+      return rows.length === 1 && rows[0].tools.length === 2;
+    },
+  ],
+  [
+    "Dates: impossible calendar dates are rejected; dotted dates are day-first; slashes month-first unless impossible",
+    function () {
+      return (
+        isoDay("2026-13-45") === null &&
+        isoDay("2026-02-30") === null &&
+        isoDay("04.03.2026") === "2026-03-04" &&
+        isoDay("03/04/2026") === "2026-03-04" &&
+        isoDay("25/03/2026") === "2026-03-25" &&
+        isoDay("2024-02-29") === "2024-02-29"
+      );
+    },
+  ],
+  [
+    "Severity: decimal scores and unfamiliar words aren't buried as info",
+    function () {
+      return (
+        normSev("4.0") === "medium" &&
+        normSev("7.0") === "high" &&
+        normSev("10.0") === "critical" &&
+        normSev("Urgent") === "critical" &&
+        normSev("P1") === "critical" &&
+        normSev("error") === "high" &&
+        normSev("Serious") === "high" &&
+        normSev("Weird") === "medium" &&
+        normSev("") === "info"
+      );
+    },
+  ],
+  [
+    "VEX without a product covers dependency findings only, never a network host",
+    function () {
+      var v = { cve: "CVE-2021-44228", status: "not_affected" };
+      return (
+        !vexMatches(v, { cves: ["CVE-2021-44228"], tool: "Nessus", host: "dc01", name: "Log4j" }) &&
+        vexMatches(v, { cves: ["CVE-2021-44228"], tool: "Trivy", host: "app:1.2", name: "log4j-core" })
+      );
+    },
+  ],
+  [
+    "Hosts: bare and bracketed IPv6 normalise to the same host; link-local is private",
+    function () {
+      return (
+        hostOf("fe80::1") === "fe80::1" &&
+        hostOf("https://[fe80::1]:8443/x") === "fe80::1" &&
+        hostOf("https://app.example.com/login") === "app.example.com" &&
+        isPrivate("[fe80::1]") === true
+      );
+    },
+  ],
+  [
+    "Heuristics: 'WordPress' is not RDP ransomware exposure",
+    function () {
+      return !isRansom({ name: "WordPress Plugin XSS" }) && isRansom({ name: "RDP exposed to the internet" });
+    },
+  ],
+);
+
 export function runSelfTests() {
   return SELF_TESTS.map(function (t) {
     var ok = false,
@@ -2459,7 +2580,12 @@ export function vexMatches(v, f) {
   )
     return false;
   var pr = vexProduct(v.product);
-  if (!pr.name) return true;
+  /* no product: a VEX statement speaks for software components, so it only covers dependency/code findings —
+     never a network finding on some host that happens to carry the same CVE */
+  if (!pr.name)
+    return familiesOf(f.tool || (f.tools || []).join(" + ")).some(function (fm) {
+      return fm === "sca" || fm === "sast";
+    });
   var text = [f.host, f.name, f.pluginId, f.desc].join(" ").toLowerCase();
   var nm = new RegExp(
     "(^|[^a-z0-9_.-])" +
@@ -3252,10 +3378,12 @@ SELF_TESTS.push(
           {
             key: "k",
             cves: ["CVE-1"],
+            tool: "Trivy",
           },
           {
             key: "h",
             cves: ["CVE-1"],
+            tool: "Trivy",
           },
         ],
         {

@@ -1,316 +1,271 @@
-/* VAPTLens Backend & Team Sync API
-   Provides a robust REST API for VAPTLens workspaces, stores, findings, batches,
-   assets, audit log, and evidence, with native PostgreSQL support and seamless
-   SQLite fallback.
+/* VAPTLens API server — accounts, sessions, roles, workspaces, stores, evidence and an append-only audit log.
+   PostgreSQL when DATABASE_URL / POSTGRES_HOST is set, otherwise SQLite (node:sqlite, Node ≥ 22.13).
+   The server is the source of truth: every request is authenticated with a session cookie and authorised by role.
+
+   Admin recovery:  node server/server.mjs reset-password <username>   (prints a temporary password)
 */
 import { createServer } from "node:http";
-import { createHash, timingSafeEqual } from "node:crypto";
-import { DatabaseSync } from "node:sqlite";
-import { existsSync, mkdirSync } from "node:fs";
+import {
+  createHash,
+  randomBytes,
+  randomUUID,
+  scrypt as scryptCb,
+  timingSafeEqual,
+} from "node:crypto";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname } from "node:path";
-import pg from "pg";
-var { Pool, types } = pg;
+import { promisify } from "node:util";
 
-// Parse bigint and numeric types as JavaScript numbers
-types.setTypeParser(20, function (val) {
-  return val === null ? null : parseInt(val, 10);
-});
-types.setTypeParser(1700, function (val) {
-  return val === null ? null : parseFloat(val);
-});
+const scrypt = promisify(scryptCb);
 
-var PORT = +(process.env.PORT || 8787);
-/* loopback unless told otherwise: without SYNC_TOKEN anyone who can connect has full access */
-var HOST = process.env.HOST || "127.0.0.1";
-var MAX_BYTES = 64 * 1024 * 1024; /* keep in step with client_max_body_size in docker/nginx.conf */
+const PORT = +(process.env.PORT || 8787);
+const HOST = process.env.HOST || "127.0.0.1";
+const MAX_BYTES =
+  64 *
+  1024 *
+  1024; /* keep in step with client_max_body_size in docker/nginx.conf */
+const MAX_AUTH_BYTES = 16 * 1024;
+const TRUST_PROXY = process.env.TRUST_PROXY === "1";
+const COOKIE_SECURE = process.env.COOKIE_SECURE === "1";
+/* Host allowlist (stops DNS rebinding). Comma-separated hostnames; default is loopback only. */
+const ALLOWED_HOSTS = (process.env.ALLOWED_HOSTS || "localhost,127.0.0.1,::1")
+  .split(",")
+  .map((h) => h.trim().toLowerCase())
+  .filter(Boolean);
 
-var rawDbUrl = process.env.DATABASE_URL || process.env.POSTGRES_URL || "";
-var isPostgres = !!(
-  (rawDbUrl &&
-    (rawDbUrl.startsWith("postgres://") || rawDbUrl.startsWith("postgresql://"))) ||
-  process.env.POSTGRES_HOST
+export const ROLES = ["Administrator", "Remediation Lead", "Security Auditor"];
+const ADMIN = "Administrator";
+const LEAD = "Remediation Lead";
+const AUDITOR = "Security Auditor";
+
+/* the only stores a client may write; anything else is rejected */
+export const STORE_NAMES = [
+  "scans",
+  "remediation",
+  "engagement",
+  "assets",
+  "library",
+  "report",
+  "campaigns",
+  "rules",
+  "goals",
+  "vex",
+  "aliases",
+  "prefs",
+  "policy",
+];
+const ADMIN_ONLY_STORES = new Set(["policy"]);
+const SYSTEM_WS = "_system";
+
+const LOCK_AFTER = 5;
+const LOCK_MINUTES = 5;
+const SESSION_MAX_HOURS = 12;
+const SCRYPT = { N: 1 << 15, r: 8, p: 1, keylen: 32 };
+
+const rawDbUrl = process.env.DATABASE_URL || process.env.POSTGRES_URL || "";
+export const isPostgres = !!(
+  /^postgres(ql)?:\/\//.test(rawDbUrl) || process.env.POSTGRES_HOST
 );
 
-var pool = null;
-var sqliteDb = null;
-var db = null;
-var getWs = null;
-var putWs = null;
+/* ---------- database adapter: one SQL dialect ($1 params, TEXT/INTEGER columns) for both engines ---------- */
+let pool = null;
+let sqlite = null;
+let q; /* (sql, params) -> rows */
+let tx; /* (async (q) => …) -> result, run inside one transaction */
 
 if (isPostgres) {
-  var poolConfig = rawDbUrl
-    ? { connectionString: rawDbUrl }
-    : {
-        host: process.env.POSTGRES_HOST,
-        port: process.env.POSTGRES_PORT ? Number(process.env.POSTGRES_PORT) : 5432,
-        user: process.env.POSTGRES_USER || process.env.PGUSER || "postgres",
-        password:
-          process.env.POSTGRES_PASSWORD || process.env.PGPASSWORD || "postgres",
-        database:
-          process.env.POSTGRES_DB || process.env.PGDATABASE || "postgres",
-      };
-
-  pool = new Pool(poolConfig);
-  db = pool;
-
-  // Initialize PostgreSQL Schema
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS workspaces (
-      name TEXT PRIMARY KEY,
-      created_at TIMESTAMPTZ NOT NULL,
-      updated_at TIMESTAMPTZ NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS stores (
-      workspace_id TEXT NOT NULL,
-      name TEXT NOT NULL,
-      value JSONB NOT NULL,
-      updated_at TIMESTAMPTZ NOT NULL,
-      PRIMARY KEY(workspace_id, name)
-    );
-
-    CREATE TABLE IF NOT EXISTS batches (
-      id INTEGER NOT NULL,
-      workspace_id TEXT NOT NULL,
-      name TEXT,
-      tool TEXT,
-      filename TEXT,
-      count INTEGER DEFAULT 0,
-      imported_at TIMESTAMPTZ,
-      raw_size BIGINT,
-      meta JSONB,
-      PRIMARY KEY(workspace_id, id)
-    );
-
-    CREATE TABLE IF NOT EXISTS findings (
-      id TEXT NOT NULL,
-      workspace_id TEXT NOT NULL,
-      batch_id INTEGER,
-      name TEXT NOT NULL,
-      host TEXT NOT NULL,
-      port INTEGER,
-      sev TEXT,
-      cvss NUMERIC,
-      vector TEXT,
-      cves JSONB,
-      cwe JSONB,
-      plugin_id TEXT,
-      tool TEXT,
-      "desc" TEXT,
-      sol TEXT,
-      url TEXT,
-      raw_data JSONB,
-      PRIMARY KEY(workspace_id, id)
-    );
-
-    CREATE TABLE IF NOT EXISTS assets (
-      workspace_id TEXT NOT NULL,
-      host TEXT NOT NULL,
-      criticality TEXT,
-      owner TEXT,
-      tags JSONB,
-      meta JSONB,
-      PRIMARY KEY(workspace_id, host)
-    );
-
-    CREATE TABLE IF NOT EXISTS audit_log (
-      id BIGSERIAL PRIMARY KEY,
-      workspace_id TEXT NOT NULL,
-      action TEXT NOT NULL,
-      detail TEXT,
-      role TEXT,
-      at TIMESTAMPTZ NOT NULL,
-      prev TEXT,
-      "user" TEXT,
-      hash TEXT,
-      ref TEXT
-    );
-
-    CREATE TABLE IF NOT EXISTS evidence (
-      workspace_id TEXT NOT NULL,
-      finding_key TEXT NOT NULL,
-      data JSONB NOT NULL,
-      updated_at TIMESTAMPTZ NOT NULL,
-      PRIMARY KEY(workspace_id, finding_key)
-    );
-
-    CREATE TABLE IF NOT EXISTS ws (
-      name TEXT PRIMARY KEY,
-      version INTEGER NOT NULL,
-      blob TEXT NOT NULL,
-      updated TIMESTAMPTZ NOT NULL
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_audit_log_ws ON audit_log (workspace_id);
-    CREATE INDEX IF NOT EXISTS idx_findings_batch ON findings (workspace_id, batch_id);
-  `);
-
-  // Ensure initial 'Default' workspace exists
-  await pool.query(`
-    INSERT INTO workspaces (name, created_at, updated_at)
-    VALUES ('Default', NOW(), NOW())
-    ON CONFLICT (name) DO NOTHING;
-  `);
-} else {
-  var defaultDb = existsSync("/data") ? "/data/vaptlens.db" : "./vaptlens.db";
-  var dbPath = process.env.DB_PATH || defaultDb;
-  try {
-    mkdirSync(dirname(dbPath), { recursive: true });
-  } catch (e) {}
-
-  sqliteDb = new DatabaseSync(dbPath);
-  db = sqliteDb;
-
-  // Enable WAL mode and foreign keys
-  sqliteDb.exec("PRAGMA journal_mode = WAL;");
-  sqliteDb.exec("PRAGMA foreign_keys = ON;");
-
-  // Initialize SQLite Schema
-  sqliteDb.exec(`
-    CREATE TABLE IF NOT EXISTS workspaces (
-      name TEXT PRIMARY KEY,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS stores (
-      workspace_id TEXT NOT NULL,
-      name TEXT NOT NULL,
-      value TEXT NOT NULL,
-      updated_at TEXT NOT NULL,
-      PRIMARY KEY(workspace_id, name)
-    );
-
-    CREATE TABLE IF NOT EXISTS batches (
-      id INTEGER NOT NULL,
-      workspace_id TEXT NOT NULL,
-      name TEXT,
-      tool TEXT,
-      filename TEXT,
-      count INTEGER DEFAULT 0,
-      imported_at TEXT,
-      raw_size INTEGER,
-      meta TEXT,
-      PRIMARY KEY(workspace_id, id)
-    );
-
-    CREATE TABLE IF NOT EXISTS findings (
-      id TEXT NOT NULL,
-      workspace_id TEXT NOT NULL,
-      batch_id INTEGER,
-      name TEXT NOT NULL,
-      host TEXT NOT NULL,
-      port INTEGER,
-      sev TEXT,
-      cvss REAL,
-      vector TEXT,
-      cves TEXT,
-      cwe TEXT,
-      plugin_id TEXT,
-      tool TEXT,
-      desc TEXT,
-      sol TEXT,
-      url TEXT,
-      raw_data TEXT,
-      PRIMARY KEY(workspace_id, id)
-    );
-
-    CREATE TABLE IF NOT EXISTS assets (
-      workspace_id TEXT NOT NULL,
-      host TEXT NOT NULL,
-      criticality TEXT,
-      owner TEXT,
-      tags TEXT,
-      meta TEXT,
-      PRIMARY KEY(workspace_id, host)
-    );
-
-    CREATE TABLE IF NOT EXISTS audit_log (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      workspace_id TEXT NOT NULL,
-      action TEXT NOT NULL,
-      detail TEXT,
-      role TEXT,
-      at TEXT,
-      prev TEXT,
-      user TEXT,
-      hash TEXT,
-      ref TEXT
-    );
-
-    CREATE TABLE IF NOT EXISTS evidence (
-      workspace_id TEXT NOT NULL,
-      finding_key TEXT NOT NULL,
-      data TEXT NOT NULL,
-      updated_at TEXT NOT NULL,
-      PRIMARY KEY(workspace_id, finding_key)
-    );
-
-    CREATE TABLE IF NOT EXISTS ws (
-      name TEXT PRIMARY KEY,
-      version INTEGER NOT NULL,
-      blob TEXT NOT NULL,
-      updated TEXT NOT NULL
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_audit_log_ws ON audit_log (workspace_id);
-    CREATE INDEX IF NOT EXISTS idx_findings_batch ON findings (workspace_id, batch_id);
-  `);
-
-  var initialNow = new Date().toISOString();
-  sqliteDb
-    .prepare(
-      "INSERT OR IGNORE INTO workspaces (name, created_at, updated_at) VALUES ('Default', ?, ?)"
-    )
-    .run(initialNow, initialNow);
-
-  getWs = sqliteDb.prepare("SELECT version, blob, updated FROM ws WHERE name = ?");
-  putWs = sqliteDb.prepare(
-    "INSERT INTO ws (name, version, blob, updated) VALUES (?, ?, ?, ?) ON CONFLICT(name) DO UPDATE SET version = excluded.version, blob = excluded.blob, updated = excluded.updated"
+  const pg = (await import("pg")).default;
+  pool = new pg.Pool(
+    Object.assign(
+      rawDbUrl
+        ? { connectionString: rawDbUrl }
+        : {
+            host: process.env.POSTGRES_HOST,
+            port: process.env.POSTGRES_PORT
+              ? Number(process.env.POSTGRES_PORT)
+              : 5432,
+            user: process.env.POSTGRES_USER || process.env.PGUSER,
+            password: process.env.POSTGRES_PASSWORD || process.env.PGPASSWORD,
+            database: process.env.POSTGRES_DB || process.env.PGDATABASE,
+          },
+      {
+        connectionTimeoutMillis: 5000,
+        idleTimeoutMillis: 30000,
+        statement_timeout: 30000,
+      },
+    ),
   );
+  pool.on("error", (e) =>
+    log({ level: "error", msg: "postgres pool error", err: e.message }),
+  );
+  const run = async (client, sql, params = []) =>
+    (await client.query(sql, params)).rows;
+  q = (sql, params) => run(pool, sql, params);
+  tx = async (fn) => {
+    const c = await pool.connect();
+    try {
+      await c.query("BEGIN");
+      const out = await fn((sql, params) => run(c, sql, params));
+      await c.query("COMMIT");
+      return out;
+    } catch (e) {
+      await c.query("ROLLBACK").catch(() => {});
+      throw e;
+    } finally {
+      c.release();
+    }
+  };
+} else {
+  const { DatabaseSync } = await import("node:sqlite");
+  const dbPath =
+    process.env.DB_PATH ||
+    (existsSync("/data") ? "/data/vaptlens.db" : "./vaptlens.db");
+  const dir = dirname(dbPath);
+  if (dir && !existsSync(dir)) mkdirSync(dir, { recursive: true });
+  sqlite = new DatabaseSync(dbPath);
+  sqlite.exec(
+    "PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;",
+  );
+  const conv = (sql) => sql.replace(/\$(\d+)/g, "?$1");
+  const exec = (sql, params = []) => {
+    const st = sqlite.prepare(conv(sql));
+    return /^\s*(select|with)\b|\breturning\b/i.test(sql)
+      ? st.all(...params)
+      : (st.run(...params), []);
+  };
+  /* node:sqlite is synchronous on one connection: serialise transactions so awaits inside one can't interleave with another */
+  let lock = Promise.resolve();
+  const serial = (fn) => {
+    const next = lock.then(fn, fn);
+    lock = next.catch(() => {});
+    return next;
+  };
+  q = (sql, params) => serial(() => exec(sql, params));
+  tx = (fn) =>
+    serial(async () => {
+      exec("BEGIN");
+      try {
+        const out = await fn(async (sql, params) => exec(sql, params));
+        exec("COMMIT");
+        return out;
+      } catch (e) {
+        exec("ROLLBACK");
+        throw e;
+      }
+    });
 }
 
-function digest(s) {
-  return createHash("sha256").update(s).digest();
+/* ---------- schema + migrations (tables are vl_-prefixed so they never collide with the pre-2026-10 schema) ---------- */
+const MIGRATIONS = [
+  [
+    `CREATE TABLE IF NOT EXISTS vl_users (
+      id TEXT PRIMARY KEY, username TEXT NOT NULL UNIQUE, name TEXT NOT NULL, role TEXT NOT NULL,
+      pw_hash TEXT NOT NULL, must_change INTEGER NOT NULL DEFAULT 0, disabled INTEGER NOT NULL DEFAULT 0,
+      failed INTEGER NOT NULL DEFAULT 0, locked_until TEXT, last_failed_at TEXT,
+      created_at TEXT NOT NULL, created_by TEXT, last_login TEXT, prev_login TEXT, pw_changed_at TEXT)`,
+    `CREATE TABLE IF NOT EXISTS vl_sessions (
+      id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES vl_users(id) ON DELETE CASCADE,
+      created_at TEXT NOT NULL, last_seen TEXT NOT NULL)`,
+    `CREATE TABLE IF NOT EXISTS vl_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)`,
+    `CREATE TABLE IF NOT EXISTS vl_workspaces (name TEXT PRIMARY KEY, created_at TEXT NOT NULL, created_by TEXT)`,
+    `CREATE TABLE IF NOT EXISTS vl_stores (
+      workspace TEXT NOT NULL REFERENCES vl_workspaces(name) ON DELETE CASCADE, name TEXT NOT NULL,
+      value TEXT NOT NULL, version INTEGER NOT NULL, updated_at TEXT NOT NULL, updated_by TEXT,
+      PRIMARY KEY (workspace, name))`,
+    `CREATE TABLE IF NOT EXISTS vl_evidence (
+      workspace TEXT NOT NULL REFERENCES vl_workspaces(name) ON DELETE CASCADE, key TEXT NOT NULL,
+      value TEXT NOT NULL, version INTEGER NOT NULL, updated_at TEXT NOT NULL, updated_by TEXT,
+      PRIMARY KEY (workspace, key))`,
+    /* append-only; deliberately no FK so deleting a workspace keeps its history */
+    `CREATE TABLE IF NOT EXISTS vl_audit (
+      workspace TEXT NOT NULL, seq INTEGER NOT NULL, at TEXT NOT NULL, user_id TEXT, username TEXT, role TEXT,
+      action TEXT NOT NULL, detail TEXT, ref TEXT, prev TEXT, hash TEXT NOT NULL, PRIMARY KEY (workspace, seq))`,
+  ],
+];
+
+async function migrate() {
+  await q(
+    "CREATE TABLE IF NOT EXISTS vl_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)",
+  );
+  const row = (
+    await q("SELECT value FROM vl_meta WHERE key = 'schema_version'")
+  )[0];
+  let v = row ? +row.value : 0;
+  for (; v < MIGRATIONS.length; v++) {
+    const steps = MIGRATIONS[v];
+    await tx(async (t) => {
+      for (const s of steps) await t(s);
+      await t(
+        "INSERT INTO vl_meta (key, value) VALUES ('schema_version', $1) ON CONFLICT (key) DO UPDATE SET value = $1",
+        [String(v + 1)],
+      );
+    });
+  }
+}
+await migrate();
+
+/* ---------- helpers ---------- */
+const now = () => new Date().toISOString();
+const sha256 = (s) => createHash("sha256").update(s).digest("hex");
+
+export function log(o) {
+  if (process.env.VL_QUIET === "1" && o.level !== "error") return;
+  process.stdout.write(JSON.stringify(Object.assign({ t: now() }, o)) + "\n");
 }
 
-function authed(req) {
-  var token = process.env.SYNC_TOKEN || "";
-  if (!token) return true;
-  var authHeader = req.headers.authorization || "";
-  var m = /^Bearer (.+)$/i.exec(authHeader);
-  if (!m) return false;
-  return timingSafeEqual(digest(m[1].trim()), digest(token));
+class HttpError extends Error {
+  constructor(status, message, extra) {
+    super(message);
+    this.status = status;
+    this.extra = extra;
+  }
+}
+const fail = (status, message, extra) => {
+  throw new HttpError(status, message, extra);
+};
+
+function send(res, code, obj, headers) {
+  res.writeHead(
+    code,
+    Object.assign(
+      {
+        "Content-Type": "application/json",
+        "Cache-Control": "no-store",
+        "X-Content-Type-Options": "nosniff",
+      },
+      headers || {},
+    ),
+  );
+  res.end(obj === undefined ? "" : JSON.stringify(obj));
 }
 
-function send(res, code, obj) {
-  res.writeHead(code, {
-    "Content-Type": "application/json",
-    "Cache-Control": "no-store",
-    "X-Content-Type-Options": "nosniff",
-  });
-  res.end(JSON.stringify(obj));
-}
-
-function readBody(req) {
-  return new Promise(function (resolve, reject) {
-    var parts = [],
-      size = 0;
-    req.on("data", function (c) {
+function readBody(req, limit = MAX_BYTES) {
+  return new Promise((resolve, reject) => {
+    const parts = [];
+    let size = 0;
+    req.on("data", (c) => {
       size += c.length;
-      if (size > MAX_BYTES) {
-        reject(Object.assign(new Error("Payload too large"), { code: 413 }));
+      if (size > limit) {
+        reject(new HttpError(413, "Payload too large"));
         req.destroy();
       } else parts.push(c);
     });
-    req.on("end", function () {
-      resolve(Buffer.concat(parts).toString("utf8"));
-    });
+    req.on("end", () => resolve(Buffer.concat(parts).toString("utf8")));
     req.on("error", reject);
   });
 }
 
-function isValidName(name) {
+async function readJson(req, limit) {
+  const text = await readBody(req, limit);
+  if (!text) return {};
+  try {
+    return JSON.parse(text);
+  } catch (e) {
+    fail(400, "Body isn't valid JSON");
+  }
+}
+
+export function isValidName(name) {
   return (
     typeof name === "string" &&
     name.length > 0 &&
@@ -329,529 +284,16 @@ function isValidKey(key) {
   );
 }
 
-function toIso(val) {
-  if (!val) return null;
-  if (val instanceof Date) return val.toISOString();
-  return String(val);
-}
-
-function parseJson(val) {
-  if (val === null || val === undefined) return null;
-  if (typeof val === "object") return val;
-  try {
-    return JSON.parse(val);
-  } catch (e) {
-    return val;
-  }
-}
-
-function toJsonb(val) {
-  if (val === null || val === undefined) return null;
-  if (typeof val === "string") {
-    try {
-      JSON.parse(val);
-      return val;
-    } catch {
-      return JSON.stringify(val);
-    }
-  }
-  return JSON.stringify(val);
-}
-
-function toArrayJsonb(val) {
-  if (val === null || val === undefined) return null;
-  if (Array.isArray(val)) return JSON.stringify(val);
-  if (typeof val === "string") {
-    var trimmed = val.trim();
-    if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
-      try {
-        var parsed = JSON.parse(trimmed);
-        if (Array.isArray(parsed)) return JSON.stringify(parsed);
-      } catch {}
-    }
-    if (trimmed.includes(",")) {
-      return JSON.stringify(
-        trimmed.split(",").map(function (s) {
-          return s.trim();
-        }).filter(Boolean)
-      );
-    }
-    if (trimmed.length > 0) {
-      return JSON.stringify([trimmed]);
-    }
-    return null;
-  }
-  return JSON.stringify([val]);
-}
-
-function saveStoreHelperSqlite(workspace, storeName, payload, now) {
-  if (!now) now = new Date().toISOString();
-  var jsonValue = JSON.stringify(payload);
-
-  sqliteDb.prepare(`
-    INSERT INTO stores (workspace_id, name, value, updated_at)
-    VALUES (?, ?, ?, ?)
-    ON CONFLICT(workspace_id, name) DO UPDATE SET
-      value = excluded.value,
-      updated_at = excluded.updated_at
-  `).run(workspace, storeName, jsonValue, now);
-
-  if (storeName === "scans" && payload && typeof payload === "object") {
-    var batches = Array.isArray(payload.batches) ? payload.batches : null;
-    var findings = Array.isArray(payload.data) ? payload.data : null;
-    if (batches !== null && findings !== null) {
-      sqliteDb.prepare("DELETE FROM batches WHERE workspace_id = ?").run(workspace);
-      sqliteDb.prepare("DELETE FROM findings WHERE workspace_id = ?").run(workspace);
-
-      var insertBatch = sqliteDb.prepare(`
-        INSERT INTO batches (id, workspace_id, name, tool, filename, count, imported_at, raw_size, meta)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `);
-      for (var b of batches) {
-        if (!b) continue;
-        var bId = b.id != null ? Number(b.id) : 0;
-        var bName = b.name ?? b.label ?? null;
-        var tool = b.tool ?? b.tools ?? null;
-        var filename = b.filename ?? b.file ?? null;
-        var count = b.count != null ? Number(b.count) : 0;
-        var importedAt = b.imported_at ?? b.importedAt ?? b.date ?? null;
-        var rawSize = b.raw_size ?? b.rawSize ?? b.size ?? null;
-        var meta =
-          b.meta != null
-            ? typeof b.meta === "string"
-              ? b.meta
-              : JSON.stringify(b.meta)
-            : null;
-        insertBatch.run(
-          bId,
-          workspace,
-          bName != null ? String(bName) : null,
-          tool != null ? String(tool) : null,
-          filename != null ? String(filename) : null,
-          count,
-          importedAt != null ? String(importedAt) : null,
-          rawSize != null ? Number(rawSize) : null,
-          meta
-        );
-      }
-
-      var insertFinding = sqliteDb.prepare(`
-        INSERT INTO findings (id, workspace_id, batch_id, name, host, port, sev, cvss, vector, cves, cwe, plugin_id, tool, desc, sol, url, raw_data)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `);
-      for (var f of findings) {
-        if (!f) continue;
-        var fId =
-          f.id != null
-            ? String(f.id)
-            : f.key != null
-              ? String(f.key)
-              : null;
-        if (!fId) continue;
-        var batchId =
-          f.batch_id != null
-            ? Number(f.batch_id)
-            : f.batchId != null
-              ? Number(f.batchId)
-              : f.batch != null
-                ? Number(f.batch)
-                : null;
-        var fName = String(f.name ?? "");
-        var host = String(f.host ?? "");
-        var port = f.port != null ? parseInt(f.port, 10) || null : null;
-        var sev = f.sev != null ? String(f.sev) : null;
-        var cvss =
-          f.cvss != null && !isNaN(Number(f.cvss)) ? Number(f.cvss) : null;
-        var vector = f.vector != null ? String(f.vector) : null;
-        var cves =
-          f.cves != null
-            ? Array.isArray(f.cves)
-              ? f.cves.join(",")
-              : String(f.cves)
-            : null;
-        var cwe =
-          f.cwe != null
-            ? Array.isArray(f.cwe)
-              ? f.cwe.join(",")
-              : String(f.cwe)
-            : null;
-        var pluginId =
-          f.pluginId != null
-            ? String(f.pluginId)
-            : f.plugin_id != null
-              ? String(f.plugin_id)
-              : null;
-        var fTool = f.tool != null ? String(f.tool) : null;
-        var desc =
-          f.desc != null
-            ? String(f.desc)
-            : f.description != null
-              ? String(f.description)
-              : null;
-        var sol =
-          f.sol != null
-            ? String(f.sol)
-            : f.solution != null
-              ? String(f.solution)
-              : null;
-        var url = f.url != null ? String(f.url) : null;
-        var rawData = JSON.stringify(f);
-
-        insertFinding.run(
-          fId,
-          workspace,
-          batchId,
-          fName,
-          host,
-          port,
-          sev,
-          cvss,
-          vector,
-          cves,
-          cwe,
-          pluginId,
-          fTool,
-          desc,
-          sol,
-          url,
-          rawData
-        );
-      }
-    }
-  }
-
-  if (
-    storeName === "assets" &&
-    payload &&
-    (Array.isArray(payload) || typeof payload === "object")
-  ) {
-    sqliteDb.prepare("DELETE FROM assets WHERE workspace_id = ?").run(workspace);
-    var insertAsset = sqliteDb.prepare(`
-      INSERT INTO assets (workspace_id, host, criticality, owner, tags, meta)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `);
-    if (Array.isArray(payload)) {
-      for (var item of payload) {
-        if (!item || !item.host) continue;
-        var aCrit = item.criticality ?? item.tier ?? null;
-        var aOwner = item.owner ?? null;
-        var aTags =
-          item.tags != null
-            ? Array.isArray(item.tags)
-              ? item.tags.join(",")
-              : String(item.tags)
-            : null;
-        var aMeta =
-          item.meta != null
-            ? typeof item.meta === "string"
-              ? item.meta
-              : JSON.stringify(item.meta)
-            : JSON.stringify(item);
-        insertAsset.run(
-          workspace,
-          String(item.host),
-          aCrit != null ? String(aCrit) : null,
-          aOwner != null ? String(aOwner) : null,
-          aTags,
-          aMeta
-        );
-      }
-    } else {
-      for (var [h, val] of Object.entries(payload)) {
-        if (!h) continue;
-        var aHost =
-          val && typeof val === "object" && val.host ? String(val.host) : h;
-        var aCrit =
-          val && typeof val === "object"
-            ? (val.criticality ?? val.tier ?? null)
-            : null;
-        var aOwner =
-          val && typeof val === "object" ? (val.owner ?? null) : null;
-        var aTags =
-          val && typeof val === "object" && val.tags != null
-            ? Array.isArray(val.tags)
-              ? val.tags.join(",")
-              : String(val.tags)
-            : null;
-        var aMeta = JSON.stringify(val);
-        insertAsset.run(
-          workspace,
-          String(aHost),
-          aCrit != null ? String(aCrit) : null,
-          aOwner != null ? String(aOwner) : null,
-          aTags,
-          aMeta
-        );
-      }
-    }
-  }
-
-  if (storeName === "audit" && Array.isArray(payload)) {
-    sqliteDb.prepare("DELETE FROM audit_log WHERE workspace_id = ?").run(workspace);
-    var insertAudit = sqliteDb.prepare(`
-      INSERT INTO audit_log (workspace_id, action, detail, role, at, prev, user, hash, ref)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-    for (var entry of payload) {
-      if (!entry || !entry.action) continue;
-      var refStr =
-        entry.ref != null
-          ? typeof entry.ref === "string"
-            ? entry.ref
-            : JSON.stringify(entry.ref)
-          : null;
-      insertAudit.run(
-        workspace,
-        String(entry.action),
-        entry.detail != null ? String(entry.detail) : null,
-        entry.role != null ? String(entry.role) : null,
-        entry.at != null ? String(entry.at) : null,
-        entry.prev != null ? String(entry.prev) : null,
-        entry.user != null ? String(entry.user) : null,
-        entry.hash != null ? String(entry.hash) : null,
-        refStr
-      );
-    }
-  }
-}
-
-async function saveStoreHelperPg(client, workspace, storeName, payload, now) {
-  if (!now) now = new Date().toISOString();
-  var jsonValue = JSON.stringify(payload);
-
-  await client.query(
-    `INSERT INTO stores (workspace_id, name, value, updated_at)
-     VALUES ($1, $2, $3::jsonb, $4)
-     ON CONFLICT(workspace_id, name) DO UPDATE SET
-       value = EXCLUDED.value,
-       updated_at = EXCLUDED.updated_at`,
-    [workspace, storeName, jsonValue, now]
-  );
-
-  if (storeName === "scans" && payload && typeof payload === "object") {
-    var batches = Array.isArray(payload.batches) ? payload.batches : null;
-    var findings = Array.isArray(payload.data) ? payload.data : null;
-    if (batches !== null && findings !== null) {
-      await client.query("DELETE FROM batches WHERE workspace_id = $1", [workspace]);
-      await client.query("DELETE FROM findings WHERE workspace_id = $1", [workspace]);
-
-      for (var b of batches) {
-        if (!b) continue;
-        var bId = b.id != null ? Number(b.id) : 0;
-        var bName = b.name ?? b.label ?? null;
-        var tool = b.tool ?? b.tools ?? null;
-        var filename = b.filename ?? b.file ?? null;
-        var count = b.count != null ? Number(b.count) : 0;
-        var importedAt = b.imported_at ?? b.importedAt ?? b.date ?? null;
-        var rawSize = b.raw_size ?? b.rawSize ?? b.size ?? null;
-        var meta = toJsonb(b.meta);
-
-        var validImportedAt = null;
-        if (importedAt) {
-          var d = new Date(importedAt);
-          if (!isNaN(d.getTime())) validImportedAt = d.toISOString();
-        }
-
-        await client.query(
-          `INSERT INTO batches (id, workspace_id, name, tool, filename, count, imported_at, raw_size, meta)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb)`,
-          [
-            bId,
-            workspace,
-            bName != null ? String(bName) : null,
-            tool != null ? String(tool) : null,
-            filename != null ? String(filename) : null,
-            count,
-            validImportedAt,
-            rawSize != null ? Number(rawSize) : null,
-            meta,
-          ]
-        );
-      }
-
-      for (var f of findings) {
-        if (!f) continue;
-        var fId =
-          f.id != null
-            ? String(f.id)
-            : f.key != null
-              ? String(f.key)
-              : null;
-        if (!fId) continue;
-        var batchId =
-          f.batch_id != null
-            ? Number(f.batch_id)
-            : f.batchId != null
-              ? Number(f.batchId)
-              : f.batch != null
-                ? Number(f.batch)
-                : null;
-        var fName = String(f.name ?? "");
-        var host = String(f.host ?? "");
-        var port = f.port != null ? parseInt(f.port, 10) || null : null;
-        var sev = f.sev != null ? String(f.sev) : null;
-        var cvss =
-          f.cvss != null && !isNaN(Number(f.cvss)) ? Number(f.cvss) : null;
-        var vector = f.vector != null ? String(f.vector) : null;
-        var cves = toArrayJsonb(f.cves);
-        var cwe = toArrayJsonb(f.cwe);
-        var pluginId =
-          f.pluginId != null
-            ? String(f.pluginId)
-            : f.plugin_id != null
-              ? String(f.plugin_id)
-              : null;
-        var fTool = f.tool != null ? String(f.tool) : null;
-        var desc =
-          f.desc != null
-            ? String(f.desc)
-            : f.description != null
-              ? String(f.description)
-              : null;
-        var sol =
-          f.sol != null
-            ? String(f.sol)
-            : f.solution != null
-              ? String(f.solution)
-              : null;
-        var url = f.url != null ? String(f.url) : null;
-        var rawData = JSON.stringify(f);
-
-        await client.query(
-          `INSERT INTO findings (id, workspace_id, batch_id, name, host, port, sev, cvss, vector, cves, cwe, plugin_id, tool, "desc", sol, url, raw_data)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11::jsonb, $12, $13, $14, $15, $16, $17::jsonb)`,
-          [
-            fId,
-            workspace,
-            batchId,
-            fName,
-            host,
-            port,
-            sev,
-            cvss,
-            vector,
-            cves,
-            cwe,
-            pluginId,
-            fTool,
-            desc,
-            sol,
-            url,
-            rawData,
-          ]
-        );
-      }
-    }
-  }
-
-  if (
-    storeName === "assets" &&
-    payload &&
-    (Array.isArray(payload) || typeof payload === "object")
-  ) {
-    await client.query("DELETE FROM assets WHERE workspace_id = $1", [workspace]);
-    if (Array.isArray(payload)) {
-      for (var item of payload) {
-        if (!item || !item.host) continue;
-        var aCrit = item.criticality ?? item.tier ?? null;
-        var aOwner = item.owner ?? null;
-        var aTags = toArrayJsonb(item.tags);
-        var aMeta = toJsonb(item.meta ?? item);
-
-        await client.query(
-          `INSERT INTO assets (workspace_id, host, criticality, owner, tags, meta)
-           VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb)`,
-          [
-            workspace,
-            String(item.host),
-            aCrit != null ? String(aCrit) : null,
-            aOwner != null ? String(aOwner) : null,
-            aTags,
-            aMeta,
-          ]
-        );
-      }
-    } else {
-      for (var [h, val] of Object.entries(payload)) {
-        if (!h) continue;
-        var aHost =
-          val && typeof val === "object" && val.host ? String(val.host) : h;
-        var aCrit =
-          val && typeof val === "object"
-            ? (val.criticality ?? val.tier ?? null)
-            : null;
-        var aOwner =
-          val && typeof val === "object" ? (val.owner ?? null) : null;
-        var aTags =
-          val && typeof val === "object" && val.tags != null
-            ? toArrayJsonb(val.tags)
-            : null;
-        var aMeta = toJsonb(val);
-
-        await client.query(
-          `INSERT INTO assets (workspace_id, host, criticality, owner, tags, meta)
-           VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb)`,
-          [
-            workspace,
-            String(aHost),
-            aCrit != null ? String(aCrit) : null,
-            aOwner != null ? String(aOwner) : null,
-            aTags,
-            aMeta,
-          ]
-        );
-      }
-    }
-  }
-
-  if (storeName === "audit" && Array.isArray(payload)) {
-    await client.query("DELETE FROM audit_log WHERE workspace_id = $1", [workspace]);
-    for (var entry of payload) {
-      if (!entry || !entry.action) continue;
-      var refStr =
-        entry.ref != null
-          ? typeof entry.ref === "string"
-            ? entry.ref
-            : JSON.stringify(entry.ref)
-          : null;
-      var auditAt = null;
-      if (entry.at) {
-        var dAt = new Date(entry.at);
-        if (!isNaN(dAt.getTime())) auditAt = dAt.toISOString();
-      }
-      if (!auditAt) auditAt = now;
-
-      await client.query(
-        `INSERT INTO audit_log (workspace_id, action, detail, role, at, prev, "user", hash, ref)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-        [
-          workspace,
-          String(entry.action),
-          entry.detail != null ? String(entry.detail) : null,
-          entry.role != null ? String(entry.role) : null,
-          auditAt,
-          entry.prev != null ? String(entry.prev) : null,
-          entry.user != null ? String(entry.user) : null,
-          entry.hash != null ? String(entry.hash) : null,
-          refStr,
-        ]
-      );
-    }
-  }
-}
-
-/* The app reaches this API same-origin (nginx / Vite proxy), so no CORS is ever needed.
-   Refusing cross-site requests stops any other website from driving the API from a user's
-   browser — important in standalone mode, where there is no token to stop it. */
 export function crossSiteBlocked(req) {
   /* modern browsers always send Sec-Fetch-Site: trust it; fall back to Origin vs Host for older clients */
-  var site = req.headers["sec-fetch-site"];
+  const site = req.headers["sec-fetch-site"];
   if (site) return site !== "same-origin" && site !== "none";
-  var origin = req.headers.origin;
+  const origin = req.headers.origin;
   if (origin) {
-    var host = req.headers["x-forwarded-host"] || req.headers.host || "";
+    const host = req.headers["x-forwarded-host"] || req.headers.host || "";
     try {
-      if (new URL(origin).host !== String(host).split(",")[0].trim()) return true;
+      if (new URL(origin).host !== String(host).split(",")[0].trim())
+        return true;
     } catch (e) {
       return true;
     }
@@ -859,838 +301,1520 @@ export function crossSiteBlocked(req) {
   return false;
 }
 
-export async function handler(req, res) {
-  if (req.method === "OPTIONS") {
-    res.writeHead(405, { Allow: "GET, POST, PUT, DELETE" });
-    return res.end();
-  }
-  if (crossSiteBlocked(req)) {
-    return send(res, 403, { error: "Cross-site requests are not allowed" });
-  }
-  /* writes must be JSON: a plain HTML form or text/plain beacon can't reach a mutating route */
-  if ((req.method === "POST" || req.method === "PUT") && !/^application\/json\b/i.test(req.headers["content-type"] || "")) {
-    return send(res, 415, { error: "Send JSON (Content-Type: application/json)" });
-  }
-
-  var url;
-  try {
-    url = new URL(req.url || "/", "http://localhost");
-  } catch (e) {
-    return send(res, 400, { error: "Invalid URL" });
-  }
-  var pathname = url.pathname;
-
-  // Health check: does not require authentication
-  if (pathname === "/api/health") {
-    if (req.method === "GET") {
-      return send(res, 200, { ok: true, db: isPostgres ? "postgres" : "sqlite" });
-    }
-    return send(res, 405, { error: "Method not allowed" });
-  }
-
-  // Backwards compatibility: /api/ws/:name
-  var mWs = /^\/api\/ws\/([^/?]+)$/.exec(pathname);
-  if (mWs) {
-    var wsName = "";
-    try {
-      wsName = decodeURIComponent(mWs[1]);
-    } catch (e) {
-      return send(res, 400, { error: "Bad Request: invalid URI component" });
-    }
-    if (!isValidName(wsName)) {
-      return send(res, 404, { error: "Not found" });
-    }
-    if (!authed(req)) {
-      return send(res, 401, { error: "Wrong or missing team token" });
-    }
-
-    if (req.method === "GET") {
-      if (isPostgres) {
-        var resWs = await pool.query(
-          "SELECT version, blob, updated FROM ws WHERE name = $1",
-          [wsName]
-        );
-        var row = resWs.rows[0];
-        return row
-          ? send(res, 200, {
-              version: Number(row.version),
-              blob: row.blob,
-              updated: toIso(row.updated),
-            })
-          : send(res, 404, {
-              error: "Nothing pushed for this workspace yet",
-              version: 0,
-            });
-      } else {
-        var row = getWs.get(wsName);
-        return row
-          ? send(res, 200, row)
-          : send(res, 404, {
-              error: "Nothing pushed for this workspace yet",
-              version: 0,
-            });
-      }
-    }
-    if (req.method === "PUT") {
-      try {
-        var text = await readBody(req);
-        var b = JSON.parse(text);
-        var snap = JSON.parse(b.blob);
-        if (snap.app !== "VAPTLens" || !snap.localStorage) {
-          return send(res, 400, { error: "Not a VAPTLens snapshot" });
-        }
-        var have = 0;
-        if (isPostgres) {
-          var resWs = await pool.query(
-            "SELECT version FROM ws WHERE name = $1",
-            [wsName]
-          );
-          have = resWs.rows[0] ? Number(resWs.rows[0].version) : 0;
-        } else {
-          var cur = getWs.get(wsName);
-          have = cur ? cur.version : 0;
-        }
-
-        if (b.version !== have) {
-          return send(res, 409, {
-            error: "Someone pushed a newer version",
-            version: have,
-          });
-        }
-        var updated = new Date().toISOString();
-        if (isPostgres) {
-          await pool.query(
-            `INSERT INTO ws (name, version, blob, updated)
-             VALUES ($1, $2, $3, $4)
-             ON CONFLICT(name) DO UPDATE SET
-               version = EXCLUDED.version,
-               blob = EXCLUDED.blob,
-               updated = EXCLUDED.updated`,
-            [wsName, have + 1, b.blob, updated]
-          );
-        } else {
-          putWs.run(wsName, have + 1, b.blob, updated);
-        }
-        return send(res, 200, { version: have + 1, updated: updated });
-      } catch (e) {
-        return send(res, e.code === 413 ? 413 : 400, {
-          error: e.code === 413 ? e.message : "Bad request body",
-        });
-      }
-    }
-    return send(res, 405, { error: "Method not allowed" });
-  }
-
-  // Authentication check for all other /api/ routes
-  if (!authed(req)) {
-    return send(res, 401, { error: "Wrong or missing team token" });
-  }
-
-  // Route: /api/workspaces
-  if (pathname === "/api/workspaces") {
-    if (req.method === "GET") {
-      var wsRows = isPostgres
-        ? (
-            await pool.query(
-              "SELECT name, created_at, updated_at FROM workspaces ORDER BY name"
-            )
-          ).rows
-        : sqliteDb
-            .prepare(
-              "SELECT name, created_at, updated_at FROM workspaces ORDER BY name"
-            )
-            .all();
-
-      var list = wsRows.map(function (r) {
-        var cAt = toIso(r.created_at);
-        var uAt = toIso(r.updated_at);
-        return {
-          name: r.name,
-          savedAt: uAt,
-          updated_at: uAt,
-          created_at: cAt,
-        };
-      });
-      return send(res, 200, list);
-    }
-    if (req.method === "POST") {
-      try {
-        var text = await readBody(req);
-        var body = JSON.parse(text);
-        if (!body || typeof body.name !== "string" || !body.name.trim()) {
-          return send(res, 400, { error: "Workspace name is required" });
-        }
-        var name = body.name.trim();
-        if (!isValidName(name)) {
-          return send(res, 400, { error: "Invalid workspace name" });
-        }
-        var now = new Date().toISOString();
-        try {
-          if (isPostgres) {
-            await pool.query(
-              "INSERT INTO workspaces (name, created_at, updated_at) VALUES ($1, $2, $3)",
-              [name, now, now]
-            );
-          } else {
-            sqliteDb
-              .prepare(
-                "INSERT INTO workspaces (name, created_at, updated_at) VALUES (?, ?, ?)"
-              )
-              .run(name, now, now);
-          }
-          return send(res, 201, {
-            ok: true,
-            name: name,
-            savedAt: now,
-            updated_at: now,
-          });
-        } catch (e) {
-          if (
-            (e.code && e.code === "23505") ||
-            (e.message &&
-              (e.message.includes("UNIQUE constraint failed") ||
-                e.message.includes("duplicate key") ||
-                e.message.includes("unique constraint")))
-          ) {
-            return send(res, 409, { error: "Workspace already exists" });
-          }
-          throw e;
-        }
-      } catch (e) {
-        return send(res, e.code === 413 ? 413 : 400, {
-          error: e.code === 413 ? e.message : "Bad request body",
-        });
-      }
-    }
-    return send(res, 405, { error: "Method not allowed" });
-  }
-
-  // Route: DELETE /api/workspaces/:name
-  var mWsDelete = /^\/api\/workspaces\/([^/?]+)$/.exec(pathname);
-  if (mWsDelete) {
-    if (req.method === "DELETE") {
-      var delName = "";
-      try {
-        delName = decodeURIComponent(mWsDelete[1]);
-      } catch (e) {
-        return send(res, 400, { error: "Bad Request: invalid URI component" });
-      }
-      if (!isValidName(delName)) {
-        return send(res, 404, { error: "Workspace not found" });
-      }
-
-      if (isPostgres) {
-        var existingPg = await pool.query(
-          "SELECT name FROM workspaces WHERE name = $1",
-          [delName]
-        );
-        if (existingPg.rows.length === 0) {
-          return send(res, 404, { error: "Workspace not found" });
-        }
-
-        var client = await pool.connect();
-        try {
-          await client.query("BEGIN");
-          await client.query("DELETE FROM stores WHERE workspace_id = $1", [delName]);
-          await client.query("DELETE FROM batches WHERE workspace_id = $1", [delName]);
-          await client.query("DELETE FROM findings WHERE workspace_id = $1", [delName]);
-          await client.query("DELETE FROM assets WHERE workspace_id = $1", [delName]);
-          await client.query("DELETE FROM audit_log WHERE workspace_id = $1", [delName]);
-          await client.query("DELETE FROM evidence WHERE workspace_id = $1", [delName]);
-          await client.query("DELETE FROM ws WHERE name = $1", [delName]);
-          await client.query("DELETE FROM workspaces WHERE name = $1", [delName]);
-          await client.query("COMMIT");
-          return send(res, 200, { ok: true, deleted: delName });
-        } catch (e) {
-          await client.query("ROLLBACK");
-          return send(res, 500, { error: e.message });
-        } finally {
-          client.release();
-        }
-      } else {
-        var existing = sqliteDb
-          .prepare("SELECT name FROM workspaces WHERE name = ?")
-          .get(delName);
-        if (!existing) {
-          return send(res, 404, { error: "Workspace not found" });
-        }
-
-        sqliteDb.exec("BEGIN");
-        try {
-          sqliteDb.prepare("DELETE FROM stores WHERE workspace_id = ?").run(delName);
-          sqliteDb.prepare("DELETE FROM batches WHERE workspace_id = ?").run(delName);
-          sqliteDb.prepare("DELETE FROM findings WHERE workspace_id = ?").run(delName);
-          sqliteDb.prepare("DELETE FROM assets WHERE workspace_id = ?").run(delName);
-          sqliteDb.prepare("DELETE FROM audit_log WHERE workspace_id = ?").run(delName);
-          sqliteDb.prepare("DELETE FROM evidence WHERE workspace_id = ?").run(delName);
-          sqliteDb.prepare("DELETE FROM ws WHERE name = ?").run(delName);
-          sqliteDb.prepare("DELETE FROM workspaces WHERE name = ?").run(delName);
-          sqliteDb.exec("COMMIT");
-          return send(res, 200, { ok: true, deleted: delName });
-        } catch (e) {
-          sqliteDb.exec("ROLLBACK");
-          return send(res, 500, { error: e.message });
-        }
-      }
-    }
-    return send(res, 405, { error: "Method not allowed" });
-  }
-
-  // Route: /api/stores/:workspace/:name
-  var mStoreOne = /^\/api\/stores\/([^/?]+)\/([^/?]+)$/.exec(pathname);
-  if (mStoreOne) {
-    var workspace = "";
-    var storeName = "";
-    try {
-      workspace = decodeURIComponent(mStoreOne[1]);
-      storeName = decodeURIComponent(mStoreOne[2]);
-    } catch (e) {
-      return send(res, 400, { error: "Bad Request: invalid URI component" });
-    }
-    if (!isValidName(workspace) || !isValidName(storeName)) {
-      return send(res, 404, { error: "Not found" });
-    }
-
-    if (req.method === "GET") {
-      var row = isPostgres
-        ? (
-            await pool.query(
-              "SELECT name, value FROM stores WHERE workspace_id = $1 AND name = $2",
-              [workspace, storeName]
-            )
-          ).rows[0]
-        : sqliteDb
-            .prepare(
-              "SELECT name, value FROM stores WHERE workspace_id = ? AND name = ?"
-            )
-            .get(workspace, storeName);
-
-      if (!row) {
-        return send(res, 404, { error: "Store not found" });
-      }
-      var parsedData = parseJson(row.value);
-      return send(res, 200, { name: row.name, data: parsedData });
-    }
-
-    if (req.method === "PUT") {
-      try {
-        var text = await readBody(req);
-        var body = JSON.parse(text);
-        var payload = body;
-        if (body && typeof body === "object" && !Array.isArray(body)) {
-          if ("batches" in body && "data" in body) {
-            payload = body;
-          } else if ("data" in body && Object.keys(body).length === 1) {
-            payload = body.data;
-          }
-        }
-
-        var now = new Date().toISOString();
-        if (isPostgres) {
-          var client = await pool.connect();
-          try {
-            await client.query("BEGIN");
-            await client.query(
-              `INSERT INTO workspaces (name, created_at, updated_at)
-               VALUES ($1, $2, $3)
-               ON CONFLICT(name) DO UPDATE SET updated_at = EXCLUDED.updated_at`,
-              [workspace, now, now]
-            );
-            await saveStoreHelperPg(client, workspace, storeName, payload, now);
-            await client.query("COMMIT");
-            return send(res, 200, {
-              ok: true,
-              name: storeName,
-              updated_at: now,
-            });
-          } catch (e) {
-            await client.query("ROLLBACK");
-            throw e;
-          } finally {
-            client.release();
-          }
-        } else {
-          sqliteDb.exec("BEGIN");
-          try {
-            sqliteDb
-              .prepare(
-                "INSERT OR IGNORE INTO workspaces (name, created_at, updated_at) VALUES (?, ?, ?)"
-              )
-              .run(workspace, now, now);
-            sqliteDb
-              .prepare("UPDATE workspaces SET updated_at = ? WHERE name = ?")
-              .run(now, workspace);
-
-            saveStoreHelperSqlite(workspace, storeName, payload, now);
-            sqliteDb.exec("COMMIT");
-            return send(res, 200, {
-              ok: true,
-              name: storeName,
-              updated_at: now,
-            });
-          } catch (e) {
-            sqliteDb.exec("ROLLBACK");
-            throw e;
-          }
-        }
-      } catch (e) {
-        return send(res, e.code === 413 ? 413 : 400, {
-          error: e.code === 413 ? e.message : "Bad request body",
-        });
-      }
-    }
-
-    if (req.method === "DELETE") {
-      if (isPostgres) {
-        var client = await pool.connect();
-        try {
-          await client.query("BEGIN");
-          await client.query(
-            "DELETE FROM stores WHERE workspace_id = $1 AND name = $2",
-            [workspace, storeName]
-          );
-          if (storeName === "scans") {
-            await client.query("DELETE FROM batches WHERE workspace_id = $1", [workspace]);
-            await client.query("DELETE FROM findings WHERE workspace_id = $1", [workspace]);
-          } else if (storeName === "assets") {
-            await client.query("DELETE FROM assets WHERE workspace_id = $1", [workspace]);
-          } else if (storeName === "audit") {
-            await client.query("DELETE FROM audit_log WHERE workspace_id = $1", [workspace]);
-          }
-          await client.query("COMMIT");
-          return send(res, 200, { ok: true, name: storeName });
-        } catch (e) {
-          await client.query("ROLLBACK");
-          return send(res, 500, { error: e.message });
-        } finally {
-          client.release();
-        }
-      } else {
-        sqliteDb.exec("BEGIN");
-        try {
-          sqliteDb
-            .prepare("DELETE FROM stores WHERE workspace_id = ? AND name = ?")
-            .run(workspace, storeName);
-          if (storeName === "scans") {
-            sqliteDb.prepare("DELETE FROM batches WHERE workspace_id = ?").run(workspace);
-            sqliteDb.prepare("DELETE FROM findings WHERE workspace_id = ?").run(workspace);
-          } else if (storeName === "assets") {
-            sqliteDb.prepare("DELETE FROM assets WHERE workspace_id = ?").run(workspace);
-          } else if (storeName === "audit") {
-            sqliteDb.prepare("DELETE FROM audit_log WHERE workspace_id = ?").run(workspace);
-          }
-          sqliteDb.exec("COMMIT");
-          return send(res, 200, { ok: true, name: storeName });
-        } catch (e) {
-          sqliteDb.exec("ROLLBACK");
-          return send(res, 500, { error: e.message });
-        }
-      }
-    }
-    return send(res, 405, { error: "Method not allowed" });
-  }
-
-  // Route: /api/stores/:workspace
-  var mStoreAll = /^\/api\/stores\/([^/?]+)$/.exec(pathname);
-  if (mStoreAll) {
-    var wsNameAll = "";
-    try {
-      wsNameAll = decodeURIComponent(mStoreAll[1]);
-    } catch (e) {
-      return send(res, 400, { error: "Bad Request: invalid URI component" });
-    }
-    if (!isValidName(wsNameAll)) {
-      return send(res, 404, { error: "Not found" });
-    }
-
-    if (req.method === "GET") {
-      if (isPostgres) {
-        var wsExistPg = await pool.query(
-          "SELECT name FROM workspaces WHERE name = $1",
-          [wsNameAll]
-        );
-        if (wsExistPg.rows.length === 0) {
-          return send(res, 404, { error: "Workspace not found" });
-        }
-        var allRowsPg = (
-          await pool.query(
-            "SELECT name, value FROM stores WHERE workspace_id = $1",
-            [wsNameAll]
-          )
-        ).rows;
-        var resultPg = {};
-        for (var r of allRowsPg) {
-          resultPg[r.name] = parseJson(r.value);
-        }
-        return send(res, 200, resultPg);
-      } else {
-        var wsExist = sqliteDb
-          .prepare("SELECT name FROM workspaces WHERE name = ?")
-          .get(wsNameAll);
-        if (!wsExist) {
-          return send(res, 404, { error: "Workspace not found" });
-        }
-        var allRows = sqliteDb
-          .prepare("SELECT name, value FROM stores WHERE workspace_id = ?")
-          .all(wsNameAll);
-        var result = {};
-        for (var r of allRows) {
-          result[r.name] = parseJson(r.value);
-        }
-        return send(res, 200, result);
-      }
-    }
-    return send(res, 405, { error: "Method not allowed" });
-  }
-
-  // Route: /api/evidence/:workspace/:key
-  var mEvidence = /^\/api\/evidence\/([^/?]+)\/([^/?]+)$/.exec(pathname);
-  if (mEvidence) {
-    var evWorkspace = "";
-    var evKey = "";
-    try {
-      evWorkspace = decodeURIComponent(mEvidence[1]);
-      evKey = decodeURIComponent(mEvidence[2]);
-    } catch (e) {
-      return send(res, 400, { error: "Bad Request: invalid URI component" });
-    }
-    if (!isValidName(evWorkspace) || !isValidKey(evKey)) {
-      return send(res, 404, { error: "Not found" });
-    }
-
-    if (req.method === "GET") {
-      var evRow = isPostgres
-        ? (
-            await pool.query(
-              "SELECT finding_key, data FROM evidence WHERE workspace_id = $1 AND finding_key = $2",
-              [evWorkspace, evKey]
-            )
-          ).rows[0]
-        : sqliteDb
-            .prepare(
-              "SELECT finding_key, data FROM evidence WHERE workspace_id = ? AND finding_key = ?"
-            )
-            .get(evWorkspace, evKey);
-
-      if (!evRow) {
-        return send(res, 200, { key: evKey, data: [] });
-      }
-      var evData = parseJson(evRow.data);
-      if (!Array.isArray(evData)) evData = [evData];
-      return send(res, 200, { key: evRow.finding_key, data: evData });
-    }
-
-    if (req.method === "PUT") {
-      try {
-        var text = await readBody(req);
-        var body = JSON.parse(text);
-        var evData =
-          body && typeof body === "object" && "data" in body ? body.data : body;
-        var now = new Date().toISOString();
-
-        if (isPostgres) {
-          var client = await pool.connect();
-          try {
-            await client.query("BEGIN");
-            await client.query(
-              `INSERT INTO workspaces (name, created_at, updated_at)
-               VALUES ($1, $2, $3)
-               ON CONFLICT(name) DO UPDATE SET updated_at = EXCLUDED.updated_at`,
-              [evWorkspace, now, now]
-            );
-            await client.query(
-              `INSERT INTO evidence (workspace_id, finding_key, data, updated_at)
-               VALUES ($1, $2, $3::jsonb, $4)
-               ON CONFLICT(workspace_id, finding_key) DO UPDATE SET
-                 data = EXCLUDED.data,
-                 updated_at = EXCLUDED.updated_at`,
-              [evWorkspace, evKey, JSON.stringify(evData), now]
-            );
-            await client.query("COMMIT");
-            return send(res, 200, { ok: true, key: evKey, updated_at: now });
-          } catch (e) {
-            await client.query("ROLLBACK");
-            throw e;
-          } finally {
-            client.release();
-          }
-        } else {
-          sqliteDb.exec("BEGIN");
-          try {
-            sqliteDb
-              .prepare(
-                "INSERT OR IGNORE INTO workspaces (name, created_at, updated_at) VALUES (?, ?, ?)"
-              )
-              .run(evWorkspace, now, now);
-            sqliteDb.prepare(`
-              INSERT INTO evidence (workspace_id, finding_key, data, updated_at)
-              VALUES (?, ?, ?, ?)
-              ON CONFLICT(workspace_id, finding_key) DO UPDATE SET
-                data = excluded.data,
-                updated_at = excluded.updated_at
-            `).run(evWorkspace, evKey, JSON.stringify(evData), now);
-            sqliteDb.exec("COMMIT");
-            return send(res, 200, { ok: true, key: evKey, updated_at: now });
-          } catch (e) {
-            sqliteDb.exec("ROLLBACK");
-            throw e;
-          }
-        }
-      } catch (e) {
-        return send(res, e.code === 413 ? 413 : 400, {
-          error: e.code === 413 ? e.message : "Bad request body",
-        });
-      }
-    }
-
-    if (req.method === "DELETE") {
-      if (isPostgres) {
-        await pool.query(
-          "DELETE FROM evidence WHERE workspace_id = $1 AND finding_key = $2",
-          [evWorkspace, evKey]
-        );
-      } else {
-        sqliteDb
-          .prepare(
-            "DELETE FROM evidence WHERE workspace_id = ? AND finding_key = ?"
-          )
-          .run(evWorkspace, evKey);
-      }
-      return send(res, 200, { ok: true, key: evKey });
-    }
-    return send(res, 405, { error: "Method not allowed" });
-  }
-
-  // Route: /api/backup/:workspace
-  var mBackup = /^\/api\/backup\/([^/?]+)$/.exec(pathname);
-  if (mBackup) {
-    var bWorkspace = "";
-    try {
-      bWorkspace = decodeURIComponent(mBackup[1]);
-    } catch (e) {
-      return send(res, 400, { error: "Bad Request: invalid URI component" });
-    }
-    if (!isValidName(bWorkspace)) {
-      return send(res, 404, { error: "Workspace not found" });
-    }
-
-    if (req.method === "GET") {
-      if (isPostgres) {
-        var wsExistPg = await pool.query(
-          "SELECT name FROM workspaces WHERE name = $1",
-          [bWorkspace]
-        );
-        if (wsExistPg.rows.length === 0) {
-          return send(res, 404, { error: "Workspace not found" });
-        }
-
-        var storeRowsPg = (
-          await pool.query(
-            "SELECT name, value FROM stores WHERE workspace_id = $1",
-            [bWorkspace]
-          )
-        ).rows;
-        var bStoresPg = {};
-        for (var sr of storeRowsPg) {
-          bStoresPg[sr.name] = parseJson(sr.value);
-        }
-
-        var evRowsPg = (
-          await pool.query(
-            "SELECT finding_key, data FROM evidence WHERE workspace_id = $1",
-            [bWorkspace]
-          )
-        ).rows;
-        var bEvidencePg = {};
-        for (var er of evRowsPg) {
-          bEvidencePg[er.finding_key] = parseJson(er.data);
-        }
-
-        return send(res, 200, {
-          app: "VAPTLens",
-          workspace: bWorkspace,
-          stores: bStoresPg,
-          evidence: bEvidencePg,
-        });
-      } else {
-        var wsExist = sqliteDb
-          .prepare("SELECT name FROM workspaces WHERE name = ?")
-          .get(bWorkspace);
-        if (!wsExist) {
-          return send(res, 404, { error: "Workspace not found" });
-        }
-
-        var storeRows = sqliteDb
-          .prepare("SELECT name, value FROM stores WHERE workspace_id = ?")
-          .all(bWorkspace);
-        var bStores = {};
-        for (var sr of storeRows) {
-          bStores[sr.name] = parseJson(sr.value);
-        }
-
-        var evRows = sqliteDb
-          .prepare("SELECT finding_key, data FROM evidence WHERE workspace_id = ?")
-          .all(bWorkspace);
-        var bEvidence = {};
-        for (var er of evRows) {
-          bEvidence[er.finding_key] = parseJson(er.data);
-        }
-
-        return send(res, 200, {
-          app: "VAPTLens",
-          workspace: bWorkspace,
-          stores: bStores,
-          evidence: bEvidence,
-        });
-      }
-    }
-    return send(res, 405, { error: "Method not allowed" });
-  }
-
-  // Route: /api/restore/:workspace
-  var mRestore = /^\/api\/restore\/([^/?]+)$/.exec(pathname);
-  if (mRestore) {
-    var rWorkspace = "";
-    try {
-      rWorkspace = decodeURIComponent(mRestore[1]);
-    } catch (e) {
-      return send(res, 400, { error: "Bad Request: invalid URI component" });
-    }
-    if (!isValidName(rWorkspace)) {
-      return send(res, 404, { error: "Invalid workspace name" });
-    }
-
-    if (req.method === "POST") {
-      try {
-        var text = await readBody(req);
-        var snap = JSON.parse(text);
-        if (!snap || typeof snap !== "object") {
-          return send(res, 400, { error: "Snapshot must be an object" });
-        }
-        if (snap.app && snap.app !== "VAPTLens") {
-          return send(res, 400, { error: "Not a VAPTLens snapshot" });
-        }
-
-        var now = new Date().toISOString();
-        if (isPostgres) {
-          var client = await pool.connect();
-          try {
-            await client.query("BEGIN");
-            await client.query(
-              `INSERT INTO workspaces (name, created_at, updated_at)
-               VALUES ($1, $2, $3)
-               ON CONFLICT(name) DO UPDATE SET updated_at = EXCLUDED.updated_at`,
-              [rWorkspace, now, now]
-            );
-
-            await client.query("DELETE FROM stores WHERE workspace_id = $1", [rWorkspace]);
-            await client.query("DELETE FROM batches WHERE workspace_id = $1", [rWorkspace]);
-            await client.query("DELETE FROM findings WHERE workspace_id = $1", [rWorkspace]);
-            await client.query("DELETE FROM assets WHERE workspace_id = $1", [rWorkspace]);
-            await client.query("DELETE FROM audit_log WHERE workspace_id = $1", [rWorkspace]);
-            await client.query("DELETE FROM evidence WHERE workspace_id = $1", [rWorkspace]);
-
-            if (snap.stores && typeof snap.stores === "object") {
-              for (var [sName, sVal] of Object.entries(snap.stores)) {
-                await saveStoreHelperPg(client, rWorkspace, sName, sVal, now);
-              }
-            }
-
-            if (snap.evidence && typeof snap.evidence === "object") {
-              for (var [eKey, eVal] of Object.entries(snap.evidence)) {
-                await client.query(
-                  `INSERT INTO evidence (workspace_id, finding_key, data, updated_at)
-                   VALUES ($1, $2, $3::jsonb, $4)`,
-                  [rWorkspace, eKey, JSON.stringify(eVal), now]
-                );
-              }
-            }
-
-            await client.query("COMMIT");
-            return send(res, 200, { ok: true, workspace: rWorkspace });
-          } catch (e) {
-            await client.query("ROLLBACK");
-            throw e;
-          } finally {
-            client.release();
-          }
-        } else {
-          sqliteDb.exec("BEGIN");
-          try {
-            sqliteDb
-              .prepare(
-                "INSERT OR IGNORE INTO workspaces (name, created_at, updated_at) VALUES (?, ?, ?)"
-              )
-              .run(rWorkspace, now, now);
-            sqliteDb
-              .prepare("UPDATE workspaces SET updated_at = ? WHERE name = ?")
-              .run(now, rWorkspace);
-
-            sqliteDb.prepare("DELETE FROM stores WHERE workspace_id = ?").run(rWorkspace);
-            sqliteDb.prepare("DELETE FROM batches WHERE workspace_id = ?").run(rWorkspace);
-            sqliteDb.prepare("DELETE FROM findings WHERE workspace_id = ?").run(rWorkspace);
-            sqliteDb.prepare("DELETE FROM assets WHERE workspace_id = ?").run(rWorkspace);
-            sqliteDb.prepare("DELETE FROM audit_log WHERE workspace_id = ?").run(rWorkspace);
-            sqliteDb.prepare("DELETE FROM evidence WHERE workspace_id = ?").run(rWorkspace);
-
-            if (snap.stores && typeof snap.stores === "object") {
-              for (var [sName, sVal] of Object.entries(snap.stores)) {
-                saveStoreHelperSqlite(rWorkspace, sName, sVal, now);
-              }
-            }
-
-            if (snap.evidence && typeof snap.evidence === "object") {
-              var insertEv = sqliteDb.prepare(`
-                INSERT INTO evidence (workspace_id, finding_key, data, updated_at)
-                VALUES (?, ?, ?, ?)
-              `);
-              for (var [eKey, eVal] of Object.entries(snap.evidence)) {
-                insertEv.run(rWorkspace, eKey, JSON.stringify(eVal), now);
-              }
-            }
-
-            sqliteDb.exec("COMMIT");
-            return send(res, 200, { ok: true, workspace: rWorkspace });
-          } catch (e) {
-            sqliteDb.exec("ROLLBACK");
-            throw e;
-          }
-        }
-      } catch (e) {
-        return send(res, e.code === 413 ? 413 : 400, {
-          error: e.code === 413 ? e.message : "Bad request body",
-        });
-      }
-    }
-    return send(res, 405, { error: "Method not allowed" });
-  }
-
-  return send(res, 404, { error: "Not found" });
+export function hostAllowed(req) {
+  const raw = String(req.headers.host || "").toLowerCase();
+  const name = raw.startsWith("[")
+    ? raw.slice(1, raw.indexOf("]"))
+    : raw.split(":")[0];
+  return ALLOWED_HOSTS.includes("*") || ALLOWED_HOSTS.includes(name);
 }
 
-export { db, pool, isPostgres };
-
-var TOKEN = process.env.SYNC_TOKEN || "";
-var dbEngineName = isPostgres ? "PostgreSQL" : "SQLite";
-if (!TOKEN) {
-  console.log(
-    `VAPTLens ${dbEngineName} server: SYNC_TOKEN not set; authentication is disabled (standalone mode).`
-  );
-  if (!/^(127\.|::1$|localhost$)/.test(HOST))
-    console.warn(
-      `WARNING: listening on ${HOST} with no SYNC_TOKEN. Anyone who can reach this port can read and write every workspace. Only do this behind a proxy that is itself not exposed.`
-    );
-} else {
-  console.log(
-    `VAPTLens ${dbEngineName} server: SYNC_TOKEN set; team authentication is active.`
-  );
+function clientIp(req) {
+  if (TRUST_PROXY && req.headers["x-real-ip"])
+    return String(req.headers["x-real-ip"]);
+  return req.socket.remoteAddress || "?";
 }
 
-if (
-  import.meta.url === "file://" + process.argv[1] ||
-  (process.argv[1] && import.meta.url.endsWith(process.argv[1]))
-) {
-  createServer(handler).listen(PORT, HOST, function () {
-    console.log(`vaptlens server listening on ${HOST}:${PORT} (${dbEngineName})`);
+/* ---------- passwords ---------- */
+export function passwordIssues(pw, username) {
+  const out = [];
+  if (typeof pw !== "string" || pw.length < 12)
+    out.push("at least 12 characters");
+  else {
+    if (pw.length > 256) out.push("at most 256 characters");
+    if (!/[a-z]/.test(pw) || !/[A-Z]/.test(pw))
+      out.push("upper and lower case");
+    if (!/\d/.test(pw) && !/[^A-Za-z0-9]/.test(pw))
+      out.push("a number or symbol");
+    if (username && pw.toLowerCase().includes(String(username).toLowerCase()))
+      out.push("not containing the username");
+    if (/^(password|passw0rd|letmein|qwerty|12345)/i.test(pw))
+      out.push("not a common password");
+  }
+  return out;
+}
+
+async function hashPassword(pw) {
+  const salt = randomBytes(16);
+  const key = await scrypt(pw, salt, SCRYPT.keylen, {
+    N: SCRYPT.N,
+    r: SCRYPT.r,
+    p: SCRYPT.p,
+    maxmem: 128 * SCRYPT.N * SCRYPT.r * 2,
+  });
+  return [
+    "scrypt",
+    SCRYPT.N,
+    SCRYPT.r,
+    SCRYPT.p,
+    salt.toString("base64"),
+    key.toString("base64"),
+  ].join("$");
+}
+
+async function verifyPassword(pw, stored) {
+  const [kind, N, r, p, salt, hash] = String(stored).split("$");
+  if (kind !== "scrypt") return false;
+  const want = Buffer.from(hash, "base64");
+  const got = await scrypt(
+    String(pw),
+    Buffer.from(salt, "base64"),
+    want.length,
+    { N: +N, r: +r, p: +p, maxmem: 128 * +N * +r * 2 },
+  );
+  return got.length === want.length && timingSafeEqual(got, want);
+}
+/* unknown usernames still pay for one scrypt so timing doesn't reveal which accounts exist */
+const DUMMY_HASH = await hashPassword(randomBytes(12).toString("hex"));
+
+function tempPassword() {
+  /* 16 chars, always satisfies passwordIssues: mixed case + digit + symbol */
+  return "Vl-" + randomBytes(9).toString("base64url") + "7a";
+}
+
+/* ---------- login rate limit (per client IP, in memory) ---------- */
+const attempts = new Map();
+function rateLimited(ip) {
+  const t = Date.now();
+  const a = (attempts.get(ip) || []).filter((x) => t - x < 5 * 60000);
+  attempts.set(ip, a);
+  return a.length >= 20;
+}
+function noteAttempt(ip) {
+  attempts.set(ip, (attempts.get(ip) || []).concat([Date.now()]));
+}
+
+/* ---------- settings ---------- */
+async function getSetting(key, dflt) {
+  const r = (await q("SELECT value FROM vl_settings WHERE key = $1", [key]))[0];
+  return r ? JSON.parse(r.value) : dflt;
+}
+async function putSetting(key, value) {
+  await q(
+    "INSERT INTO vl_settings (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = $2",
+    [key, JSON.stringify(value)],
+  );
+}
+const idleMinutes = () => getSetting("idleMinutes", 15);
+
+/* ---------- users & sessions ---------- */
+export function publicUser(u) {
+  return { id: u.id, username: u.username, name: u.name, role: u.role };
+}
+function adminView(u) {
+  return Object.assign(publicUser(u), {
+    disabled: !!u.disabled,
+    mustChange: !!u.must_change,
+    locked: !!(u.locked_until && u.locked_until > now()),
+    createdAt: u.created_at,
+    createdBy: u.created_by,
+    lastLogin: u.last_login,
   });
 }
+
+const SID = "vl_sid";
+function sessionCookie(req, token, maxAge) {
+  const secure = COOKIE_SECURE || req.headers["x-forwarded-proto"] === "https";
+  return [
+    SID + "=" + token,
+    "Path=/api",
+    "HttpOnly",
+    "SameSite=Strict",
+    "Max-Age=" + maxAge,
+  ]
+    .concat(secure ? ["Secure"] : [])
+    .join("; ");
+}
+function readSid(req) {
+  const m = new RegExp("(?:^|;\\s*)" + SID + "=([A-Za-z0-9_-]{20,})").exec(
+    req.headers.cookie || "",
+  );
+  return m ? m[1] : null;
+}
+
+async function createSession(req, userId) {
+  const token = randomBytes(32).toString("base64url");
+  const t = now();
+  await q(
+    "INSERT INTO vl_sessions (id, user_id, created_at, last_seen) VALUES ($1, $2, $3, $3)",
+    [sha256(token), userId, t],
+  );
+  return sessionCookie(req, token, SESSION_MAX_HOURS * 3600);
+}
+
+/* returns { user, sid } for a live session, or throws 401 */
+async function requireSession(req) {
+  const token = readSid(req);
+  if (!token) fail(401, "Sign in to continue.", { code: "signed_out" });
+  const sid = sha256(token);
+  const row = (
+    await q(
+      `SELECT s.id AS sid, s.created_at AS s_created, s.last_seen, u.* FROM vl_sessions s JOIN vl_users u ON u.id = s.user_id WHERE s.id = $1`,
+      [sid],
+    )
+  )[0];
+  if (!row || row.disabled)
+    fail(401, "Sign in to continue.", { code: "signed_out" });
+  const t = Date.now();
+  const idle = (await idleMinutes()) * 60000;
+  if (
+    t - Date.parse(row.last_seen) > idle ||
+    t - Date.parse(row.s_created) > SESSION_MAX_HOURS * 3600000
+  ) {
+    await q("DELETE FROM vl_sessions WHERE id = $1", [sid]);
+    fail(401, "Signed out after " + (await idleMinutes()) + " minutes idle.", {
+      code: "idle",
+    });
+  }
+  if (t - Date.parse(row.last_seen) > 60000)
+    await q("UPDATE vl_sessions SET last_seen = $1 WHERE id = $2", [
+      now(),
+      sid,
+    ]);
+  return { user: row, sid };
+}
+
+function requireRole(user, roles) {
+  if (!roles.includes(user.role))
+    fail(403, "Your role (" + user.role + ") can't do that.");
+}
+
+async function activeAdmins(t, excludeId) {
+  return (
+    await t(
+      "SELECT id FROM vl_users WHERE role = $1 AND disabled = 0 AND id <> $2",
+      [ADMIN, excludeId || ""],
+    )
+  ).length;
+}
+
+/* ---------- audit (append-only, hash-chained, written only by the server) ---------- */
+export function auditHash(e) {
+  return sha256(
+    JSON.stringify([
+      e.workspace,
+      e.seq,
+      e.at,
+      e.username || "",
+      e.role || "",
+      e.action,
+      e.detail || "",
+      e.ref || "",
+      e.prev || "",
+    ]),
+  );
+}
+
+async function appendAudit(workspace, user, action, detail, ref) {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      return await tx(async (t) => {
+        const last = (
+          await t(
+            "SELECT seq, hash FROM vl_audit WHERE workspace = $1 ORDER BY seq DESC LIMIT 1",
+            [workspace],
+          )
+        )[0];
+        const e = {
+          workspace,
+          seq: last ? +last.seq + 1 : 1,
+          at: now(),
+          user_id: user ? user.id : null,
+          username: user ? user.username : null,
+          role: user ? user.role : null,
+          action,
+          detail: detail == null ? null : String(detail),
+          ref:
+            ref == null
+              ? null
+              : typeof ref === "string"
+                ? ref
+                : JSON.stringify(ref),
+          prev: last ? last.hash : "",
+        };
+        e.hash = auditHash(e);
+        await t(
+          "INSERT INTO vl_audit (workspace, seq, at, user_id, username, role, action, detail, ref, prev, hash) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)",
+          [
+            e.workspace,
+            e.seq,
+            e.at,
+            e.user_id,
+            e.username,
+            e.role,
+            e.action,
+            e.detail,
+            e.ref,
+            e.prev,
+            e.hash,
+          ],
+        );
+        return e;
+      });
+    } catch (e) {
+      /* two writers raced for the same seq: retry */
+      if (attempt === 2 || !/unique|duplicate|constraint/i.test(e.message))
+        throw e;
+    }
+  }
+}
+
+function clientAuditEntry(r) {
+  let ref = r.ref;
+  if (ref && ref[0] === "[") {
+    try {
+      ref = JSON.parse(ref);
+    } catch (e) {}
+  }
+  const o = {
+    seq: +r.seq,
+    at: r.at,
+    user: r.username,
+    role: r.role,
+    action: r.action,
+    detail: r.detail,
+    hash: r.hash,
+    prev: r.prev,
+  };
+  if (ref) o.ref = ref;
+  return o;
+}
+
+export async function verifyAuditChain(workspace) {
+  const rows = await q(
+    "SELECT * FROM vl_audit WHERE workspace = $1 ORDER BY seq ASC",
+    [workspace],
+  );
+  let prev = "";
+  for (let i = 0; i < rows.length; i++) {
+    const r = Object.assign({}, rows[i], { seq: +rows[i].seq });
+    if (r.seq !== i + 1)
+      return {
+        ok: false,
+        n: rows.length,
+        at: r.seq,
+        reason: "entries missing before #" + r.seq,
+      };
+    if ((r.prev || "") !== prev)
+      return {
+        ok: false,
+        n: rows.length,
+        at: r.seq,
+        reason: "link broken at #" + r.seq,
+      };
+    if (auditHash(r) !== r.hash)
+      return {
+        ok: false,
+        n: rows.length,
+        at: r.seq,
+        reason: "entry #" + r.seq + " changed",
+      };
+    prev = r.hash;
+  }
+  return { ok: true, n: rows.length };
+}
+
+/* ---------- workspaces / stores / evidence ---------- */
+async function requireWorkspace(name) {
+  if (!isValidName(name) || name === SYSTEM_WS) fail(404, "No such workspace");
+  const r = (
+    await q("SELECT name FROM vl_workspaces WHERE name = $1", [name])
+  )[0];
+  if (!r) fail(404, "No such workspace");
+}
+
+/* prefs are per user: the client sends/receives { [username]: prefs } but only ever sees and writes its own */
+const prefsRow = (user) => "prefs@" + user.id;
+
+function canWriteStore(user, name) {
+  if (name === "prefs") return true;
+  if (user.role === AUDITOR) return false;
+  if (ADMIN_ONLY_STORES.has(name)) return user.role === ADMIN;
+  return true;
+}
+
+async function putVersioned(
+  table,
+  keyCol,
+  workspace,
+  key,
+  value,
+  version,
+  user,
+) {
+  const json = JSON.stringify(value === undefined ? null : value);
+  const t = now();
+  if (version === 0) {
+    const ins = await q(
+      `INSERT INTO ${table} (workspace, ${keyCol}, value, version, updated_at, updated_by) VALUES ($1, $2, $3, 1, $4, $5)
+       ON CONFLICT (workspace, ${keyCol}) DO NOTHING RETURNING version`,
+      [workspace, key, json, t, user.username],
+    );
+    if (ins.length) return 1;
+  } else {
+    const up = await q(
+      `UPDATE ${table} SET value = $1, version = version + 1, updated_at = $2, updated_by = $3
+       WHERE workspace = $4 AND ${keyCol} = $5 AND version = $6 RETURNING version`,
+      [json, t, user.username, workspace, key, version],
+    );
+    if (up.length) return +up[0].version;
+  }
+  const cur = (
+    await q(
+      `SELECT value, version, updated_by FROM ${table} WHERE workspace = $1 AND ${keyCol} = $2`,
+      [workspace, key],
+    )
+  )[0];
+  fail(409, "Someone else changed this since you loaded it.", {
+    code: "conflict",
+    version: cur ? +cur.version : 0,
+    data: cur ? JSON.parse(cur.value) : null,
+    by: cur ? cur.updated_by : null,
+  });
+}
+
+function parseVersion(v) {
+  if (!Number.isInteger(v) || v < 0)
+    fail(400, "Send the version you loaded (an integer, 0 for new).");
+  return v;
+}
+
+/* ---------- governance rules (the server's copy of separation of duties and the two-person rule) ----------
+   The client mirrors these for a friendly UI; these are the ones that count. They run on every PUT of
+   the remediation and engagement stores, comparing the stored value with the new one. */
+const KEV = JSON.parse(
+  readFileSync(new URL("./kev-bundled.json", import.meta.url), "utf8"),
+);
+const KEV_IDS = new Set(KEV.ids);
+const KEV_NAMES = new RegExp(KEV.namesPattern, "i");
+const SEV_RANK = { critical: 4, high: 3, medium: 2, low: 1, info: 0 };
+export const POLICY_DEFAULTS = {
+  sod: true,
+  twoPerson: false,
+  maxDays: { critical: 30, high: 90, medium: 180, low: 365, info: 365 },
+};
+
+/* worst severity and KEV status per finding key, from the stored scans (same rule as isKev in src/lib/data.ts) */
+export function findingFacts(scans) {
+  const out = new Map();
+  for (const r of (scans && scans.data) || []) {
+    if (!r || !r.key) continue;
+    const cves = (r.cves || []).map((c) => String(c).toUpperCase());
+    const kev = cves.length
+      ? cves.some((c) => KEV_IDS.has(c))
+      : KEV_NAMES.test((r.name || "") + " " + (r.desc || "")) &&
+        !/end[- ]of[- ]life|unsupported version|\beol\b|detection|version info|installed/i.test(
+          r.name || "",
+        );
+    const cur = out.get(r.key);
+    const sev = String(r.sev || "info").toLowerCase();
+    if (!cur) out.set(r.key, { sev, kev });
+    else
+      out.set(r.key, {
+        sev: (SEV_RANK[sev] || 0) > (SEV_RANK[cur.sev] || 0) ? sev : cur.sev,
+        kev: cur.kev || kev,
+      });
+  }
+  return out;
+}
+
+const decided = (s) => s === "accepted" || s === "fp";
+const same = (a, b) => (a == null ? null : a) === (b == null ? null : b);
+function addDaysIso(day, n) {
+  const d = new Date(day + "T00:00:00Z");
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+/* throws 403/400 with a human reason; returns nothing when the change is allowed */
+export function checkRemediation(oldGov, newGov, actor, policy, facts, today) {
+  oldGov = oldGov || {};
+  newGov = newGov || {};
+  const pol = Object.assign({}, POLICY_DEFAULTS, policy || {});
+  const sod = pol.sod !== false;
+  const admin = actor.role === ADMIN;
+  const me = actor.username;
+  const keys = new Set(Object.keys(oldGov).concat(Object.keys(newGov)));
+  for (const k of keys) {
+    const o = oldGov[k] || {};
+    const n = newGov[k] || {};
+    const fact = facts.get(k);
+    const critOrKev =
+      !fact ||
+      fact.sev === "critical" ||
+      fact.kev; /* unknown finding: treat as sensitive */
+
+    /* requests are always made in your own name (or put back by whoever approved them, when undoing) */
+    if (
+      n.state === "requested" &&
+      (o.state !== "requested" ||
+        !same(o.requestedBy, n.requestedBy) ||
+        !same(o.requestedState, n.requestedState))
+    ) {
+      const undoOwnApproval =
+        decided(o.state) &&
+        o.approvedBy === me &&
+        same(n.requestedBy, o.requestedBy);
+      if (n.requestedBy !== me && !undoOwnApproval)
+        fail(403, "A request has to be made in your own name.", {
+          code: "governance",
+          key: k,
+        });
+    }
+
+    /* accepting risk or marking false positive (new, renewed, re-dated or re-approved) */
+    if (
+      decided(n.state) &&
+      (o.state !== n.state ||
+        !same(o.until, n.until) ||
+        !same(o.approvedBy, n.approvedBy))
+    ) {
+      const vex =
+        n.state === "fp" && n.by === "VEX" && n.vexId && !n.approvedBy;
+      if (!admin)
+        fail(
+          403,
+          "Only an administrator can accept risk or mark a false positive. Request it instead.",
+          { code: "governance", key: k },
+        );
+      if (!vex) {
+        if (n.approvedBy !== me)
+          fail(400, "An approval has to be recorded in your own name.", {
+            code: "governance",
+            key: k,
+          });
+        const fromOthersRequest =
+          o.state === "requested" &&
+          o.requestedState === n.state &&
+          o.requestedBy &&
+          o.requestedBy !== me;
+        if (sod && !fromOthersRequest)
+          fail(
+            403,
+            "Separation of duties: someone else has to request this, and nobody approves their own request.",
+            { code: "governance", key: k },
+          );
+        if (!sod && pol.twoPerson && critOrKev && !fromOthersRequest)
+          fail(
+            403,
+            "Two-person rule: critical and KEV decisions need a request from a second person.",
+            { code: "governance", key: k },
+          );
+      }
+      if (n.state === "accepted") {
+        const max =
+          (pol.maxDays || {})[fact && fact.sev] ||
+          Math.min(...Object.values(pol.maxDays || { x: 365 }).map(Number));
+        if (!n.until || n.until > addDaysIso(today, max))
+          fail(
+            400,
+            "Exceptions for this finding can last at most " +
+              max +
+              " days under your policy.",
+            { code: "governance", key: k },
+          );
+      }
+    }
+
+    /* deciding someone else's pending request without approving it (reject) is for administrators; withdrawing your own is fine */
+    if (
+      o.state === "requested" &&
+      n.state !== "requested" &&
+      !decided(n.state) &&
+      o.requestedBy !== me &&
+      !admin
+    )
+      fail(403, "Only an administrator can reject someone else's request.", {
+        code: "governance",
+        key: k,
+      });
+
+    /* re-scoring changes severity, SLA and who must approve: administrators only */
+    if (!same(o.cvssVector, n.cvssVector) && !admin)
+      fail(403, "Only an administrator can re-score a finding.", {
+        code: "governance",
+        key: k,
+      });
+  }
+}
+
+const REPORT_META = ["status", "approvedAt", "approvedBy", "editedBy"];
+const strip = (x) =>
+  JSON.stringify(
+    Object.keys(x)
+      .sort()
+      .filter((k) => !REPORT_META.includes(k))
+      .map((k) => [k, x[k]]),
+  );
+export function checkEngagement(oldE, newE, actor, policy, lastEditor) {
+  const pol = Object.assign({}, POLICY_DEFAULTS, policy || {});
+  const o = oldE || {};
+  const n = newE || {};
+  if (n.status !== "Approved") return;
+  if (o.status !== "Approved") {
+    if (actor.role !== ADMIN)
+      fail(403, "Only an administrator can approve the report.", {
+        code: "governance",
+      });
+    if (n.approvedBy !== actor.username)
+      fail(400, "An approval has to be recorded in your own name.", {
+        code: "governance",
+      });
+    if (
+      pol.sod !== false &&
+      (lastEditor === actor.username || strip(o) !== strip(n))
+    )
+      fail(
+        403,
+        "Separation of duties: whoever edits the report can't also approve it.",
+        { code: "governance" },
+      );
+    return;
+  }
+  if (strip(o) !== strip(n) || !same(o.approvedBy, n.approvedBy))
+    fail(
+      403,
+      "The report changed after approval; save it as In review so it can be approved again.",
+      { code: "governance" },
+    );
+}
+
+/* ---------- routing ---------- */
+const routes = [];
+function route(method, pattern, opts, fn) {
+  const keys = [];
+  const re = new RegExp(
+    "^" +
+      pattern.replace(/:(\w+)/g, (_, k) => {
+        keys.push(k);
+        return "([^/]+)";
+      }) +
+      "$",
+  );
+  routes.push({ method, pattern, re, keys, opts, fn });
+}
+
+/* auth */
+route("GET", "/api/auth/state", { auth: false }, async (req) => {
+  const users = +(await q("SELECT COUNT(*) AS n FROM vl_users"))[0].n;
+  if (!users) return { body: { setupNeeded: true } };
+  try {
+    const s = await requireSession(req);
+    return {
+      body: {
+        user: publicUser(s.user),
+        mustChange: !!s.user.must_change,
+        idleMinutes: await idleMinutes(),
+      },
+    };
+  } catch (e) {
+    if (e.status === 401)
+      return {
+        body: {
+          signedOut: e.extra && e.extra.code === "idle" ? e.message : "",
+        },
+      };
+    throw e;
+  }
+});
+
+route(
+  "POST",
+  "/api/auth/setup",
+  { auth: false, limit: MAX_AUTH_BYTES },
+  async (req, ctx) => {
+    const b = ctx.body;
+    const username = String(b.username || "")
+      .trim()
+      .toLowerCase();
+    if (!/^[a-z0-9._-]{3,32}$/.test(username))
+      fail(
+        400,
+        "Usernames are 3–32 characters: letters, numbers, dot, dash, underscore.",
+      );
+    const issues = passwordIssues(b.password, username);
+    if (issues.length) fail(400, "Password needs " + issues.join(", ") + ".");
+    const hash = await hashPassword(b.password);
+    const u = {
+      id: randomUUID(),
+      username,
+      name:
+        String(b.name || "")
+          .trim()
+          .slice(0, 80) || username,
+      role: ADMIN,
+    };
+    await tx(async (t) => {
+      if (+(await t("SELECT COUNT(*) AS n FROM vl_users"))[0].n)
+        fail(409, "Setup is already done. Sign in instead.");
+      const ts = now();
+      await t(
+        "INSERT INTO vl_users (id, username, name, role, pw_hash, created_at, last_login, pw_changed_at) VALUES ($1,$2,$3,$4,$5,$6,$6,$6)",
+        [u.id, u.username, u.name, u.role, hash, ts],
+      );
+      await t(
+        "INSERT INTO vl_workspaces (name, created_at, created_by) VALUES ('Default', $1, $2) ON CONFLICT (name) DO NOTHING",
+        [ts, username],
+      );
+    });
+    await appendAudit(
+      SYSTEM_WS,
+      u,
+      "SETUP",
+      u.username + " created the first administrator",
+    );
+    return {
+      body: { user: publicUser(u), mustChange: false, first: true },
+      headers: { "Set-Cookie": await createSession(req, u.id) },
+    };
+  },
+);
+
+route(
+  "POST",
+  "/api/auth/login",
+  { auth: false, limit: MAX_AUTH_BYTES },
+  async (req, ctx) => {
+    const ip = clientIp(req);
+    if (rateLimited(ip))
+      fail(
+        429,
+        "Too many sign-in attempts from this address. Wait a few minutes.",
+      );
+    noteAttempt(ip);
+    const username = String(ctx.body.username || "")
+      .trim()
+      .toLowerCase();
+    const pw = String(ctx.body.password || "");
+    const u = (
+      await q("SELECT * FROM vl_users WHERE username = $1", [username])
+    )[0];
+    const ok = await verifyPassword(pw, u ? u.pw_hash : DUMMY_HASH);
+    const bad = () => fail(401, "Wrong username or password.", { code: "bad" });
+    if (!u) bad();
+    if (u.locked_until && u.locked_until > now())
+      fail(423, "Too many failed attempts. Try again in a few minutes.", {
+        code: "locked",
+      });
+    if (!ok) {
+      const failed =
+        (u.locked_until && u.locked_until <= now() ? 0 : +u.failed) + 1;
+      const lock =
+        failed >= LOCK_AFTER
+          ? new Date(Date.now() + LOCK_MINUTES * 60000).toISOString()
+          : null;
+      await q(
+        "UPDATE vl_users SET failed = $1, locked_until = $2, last_failed_at = $3 WHERE id = $4",
+        [failed, lock, now(), u.id],
+      );
+      await appendAudit(
+        SYSTEM_WS,
+        u,
+        "LOGIN_FAILED",
+        u.username +
+          " failed to sign in" +
+          (lock ? "; account locked " + LOCK_MINUTES + " min" : ""),
+      );
+      if (lock)
+        fail(
+          423,
+          "Too many failed attempts. Locked for " + LOCK_MINUTES + " minutes.",
+          { code: "locked" },
+        );
+      bad();
+    }
+    if (u.disabled)
+      fail(403, "This account is disabled. Ask an administrator.", {
+        code: "disabled",
+      });
+    const hadFails = +u.failed;
+    await q(
+      "UPDATE vl_users SET failed = 0, locked_until = NULL, prev_login = last_login, last_login = $1 WHERE id = $2",
+      [now(), u.id],
+    );
+    await appendAudit(
+      SYSTEM_WS,
+      u,
+      "LOGIN",
+      u.username +
+        " signed in" +
+        (hadFails ? " after " + hadFails + " failed attempt(s)" : ""),
+    );
+    return {
+      body: {
+        user: publicUser(u),
+        mustChange: !!u.must_change,
+        hadFails,
+        prevLogin: u.last_login,
+      },
+      headers: { "Set-Cookie": await createSession(req, u.id) },
+    };
+  },
+);
+
+route("POST", "/api/auth/logout", { auth: false }, async (req) => {
+  const token = readSid(req);
+  if (token) {
+    const sid = sha256(token);
+    const row = (
+      await q(
+        "SELECT u.* FROM vl_sessions s JOIN vl_users u ON u.id = s.user_id WHERE s.id = $1",
+        [sid],
+      )
+    )[0];
+    await q("DELETE FROM vl_sessions WHERE id = $1", [sid]);
+    if (row)
+      await appendAudit(SYSTEM_WS, row, "LOGOUT", row.username + " signed out");
+  }
+  return {
+    body: { ok: true },
+    headers: { "Set-Cookie": sessionCookie(req, "", 0) },
+  };
+});
+
+route(
+  "POST",
+  "/api/auth/password",
+  { mustChangeOk: true, limit: MAX_AUTH_BYTES },
+  async (req, ctx) => {
+    const me = ctx.user;
+    if (!(await verifyPassword(ctx.body.current, me.pw_hash)))
+      fail(400, "Your current password is wrong.");
+    const issues = passwordIssues(ctx.body.next, me.username);
+    if (issues.length) fail(400, "Password needs " + issues.join(", ") + ".");
+    if (ctx.body.next === ctx.body.current)
+      fail(400, "Choose a password you haven't just used.");
+    await q(
+      "UPDATE vl_users SET pw_hash = $1, must_change = 0, pw_changed_at = $2 WHERE id = $3",
+      [await hashPassword(ctx.body.next), now(), me.id],
+    );
+    /* every other session of this user ends; this one carries on */
+    await q("DELETE FROM vl_sessions WHERE user_id = $1 AND id <> $2", [
+      me.id,
+      ctx.sid,
+    ]);
+    await appendAudit(
+      SYSTEM_WS,
+      me,
+      "PASSWORD_CHANGE",
+      me.username + " changed their password",
+    );
+    return { body: { ok: true } };
+  },
+);
+
+/* users */
+route("GET", "/api/users/directory", {}, async () => ({
+  body: (
+    await q("SELECT * FROM vl_users WHERE disabled = 0 ORDER BY username")
+  ).map(publicUser),
+}));
+
+route("GET", "/api/users", { roles: [ADMIN] }, async () => ({
+  body: (await q("SELECT * FROM vl_users ORDER BY username")).map(adminView),
+}));
+
+route(
+  "POST",
+  "/api/users",
+  { roles: [ADMIN], limit: MAX_AUTH_BYTES },
+  async (req, ctx) => {
+    const b = ctx.body;
+    const username = String(b.username || "")
+      .trim()
+      .toLowerCase();
+    if (!/^[a-z0-9._-]{3,32}$/.test(username))
+      fail(
+        400,
+        "Usernames are 3–32 characters: letters, numbers, dot, dash, underscore.",
+      );
+    if (!ROLES.includes(b.role)) fail(400, "Pick a role.");
+    const issues = passwordIssues(b.password, username);
+    if (issues.length) fail(400, "Password needs " + issues.join(", ") + ".");
+    const u = {
+      id: randomUUID(),
+      username,
+      name:
+        String(b.name || "")
+          .trim()
+          .slice(0, 80) || username,
+      role: b.role,
+    };
+    try {
+      await q(
+        "INSERT INTO vl_users (id, username, name, role, pw_hash, must_change, created_at, created_by, pw_changed_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$7)",
+        [
+          u.id,
+          u.username,
+          u.name,
+          u.role,
+          await hashPassword(b.password),
+          b.mustChange === false ? 0 : 1,
+          now(),
+          ctx.user.username,
+        ],
+      );
+    } catch (e) {
+      if (/unique|duplicate|constraint/i.test(e.message))
+        fail(409, "That username is taken.");
+      throw e;
+    }
+    await appendAudit(
+      SYSTEM_WS,
+      ctx.user,
+      "USER_ADD",
+      ctx.user.username + " added " + u.username + " (" + u.role + ")",
+    );
+    return {
+      status: 201,
+      body: adminView(
+        (await q("SELECT * FROM vl_users WHERE id = $1", [u.id]))[0],
+      ),
+    };
+  },
+);
+
+route(
+  "PATCH",
+  "/api/users/:id",
+  { roles: [ADMIN], limit: MAX_AUTH_BYTES },
+  async (req, ctx) => {
+    const b = ctx.body;
+    const what = [];
+    let temp = null;
+    await tx(async (t) => {
+      const u = (
+        await t("SELECT * FROM vl_users WHERE id = $1", [ctx.params.id])
+      )[0];
+      if (!u) fail(404, "No such user");
+      const role = b.role !== undefined ? b.role : u.role;
+      const disabled =
+        b.disabled !== undefined ? (b.disabled ? 1 : 0) : +u.disabled;
+      if (!ROLES.includes(role)) fail(400, "Pick a role.");
+      if (
+        (role !== ADMIN || disabled) &&
+        u.role === ADMIN &&
+        !(await activeAdmins(t, u.id))
+      )
+        fail(409, "Keep at least one active administrator.");
+      const name =
+        b.name !== undefined
+          ? String(b.name).trim().slice(0, 80) || u.username
+          : u.name;
+      await t(
+        "UPDATE vl_users SET name = $1, role = $2, disabled = $3 WHERE id = $4",
+        [name, role, disabled, u.id],
+      );
+      if (role !== u.role) what.push("role " + u.role + " → " + role);
+      if (disabled !== +u.disabled)
+        what.push(disabled ? "disabled" : "enabled");
+      if (b.resetPassword) {
+        temp = tempPassword();
+        await t(
+          "UPDATE vl_users SET pw_hash = $1, must_change = 1, failed = 0, locked_until = NULL, pw_changed_at = $2 WHERE id = $3",
+          [await hashPassword(temp), now(), u.id],
+        );
+        what.push("password reset");
+      }
+      if (b.unlock) {
+        await t(
+          "UPDATE vl_users SET failed = 0, locked_until = NULL WHERE id = $1",
+          [u.id],
+        );
+        what.push("unlocked");
+      }
+      /* any change to who someone is or can do ends their sessions so it applies immediately */
+      if (role !== u.role || disabled || b.resetPassword)
+        await t("DELETE FROM vl_sessions WHERE user_id = $1", [u.id]);
+      ctx.target = u;
+    });
+    if (what.length)
+      await appendAudit(
+        SYSTEM_WS,
+        ctx.user,
+        "USER_UPDATE",
+        ctx.user.username +
+          " changed " +
+          ctx.target.username +
+          ": " +
+          what.join(", "),
+      );
+    const body = adminView(
+      (await q("SELECT * FROM vl_users WHERE id = $1", [ctx.params.id]))[0],
+    );
+    if (temp) body.tempPassword = temp;
+    return { body };
+  },
+);
+
+route("DELETE", "/api/users/:id", { roles: [ADMIN] }, async (req, ctx) => {
+  if (ctx.params.id === ctx.user.id)
+    fail(409, "You can't delete your own account.");
+  let gone;
+  await tx(async (t) => {
+    gone = (
+      await t("SELECT * FROM vl_users WHERE id = $1", [ctx.params.id])
+    )[0];
+    if (!gone) fail(404, "No such user");
+    if (gone.role === ADMIN && !(await activeAdmins(t, gone.id)))
+      fail(409, "Keep at least one active administrator.");
+    await t("DELETE FROM vl_users WHERE id = $1", [gone.id]);
+  });
+  await appendAudit(
+    SYSTEM_WS,
+    ctx.user,
+    "USER_REMOVE",
+    ctx.user.username + " removed " + gone.username,
+  );
+  return { body: { ok: true } };
+});
+
+/* settings */
+route("GET", "/api/settings", {}, async () => ({
+  body: { idleMinutes: await idleMinutes() },
+}));
+route(
+  "PUT",
+  "/api/settings",
+  { roles: [ADMIN], limit: MAX_AUTH_BYTES },
+  async (req, ctx) => {
+    const m = ctx.body.idleMinutes;
+    if (!Number.isInteger(m) || m < 5 || m > 720)
+      fail(400, "Idle sign-out is 5–720 minutes.");
+    await putSetting("idleMinutes", m);
+    await appendAudit(
+      SYSTEM_WS,
+      ctx.user,
+      "SETTINGS",
+      ctx.user.username + " set idle sign-out to " + m + " min",
+    );
+    return { body: { idleMinutes: m } };
+  },
+);
+
+/* workspaces */
+route("GET", "/api/workspaces", {}, async () => ({
+  body: (
+    await q(
+      "SELECT name, created_at, created_by FROM vl_workspaces ORDER BY name",
+    )
+  ).map((r) => ({
+    name: r.name,
+    createdAt: r.created_at,
+    createdBy: r.created_by,
+  })),
+}));
+
+route(
+  "POST",
+  "/api/workspaces",
+  { roles: [ADMIN, LEAD], limit: MAX_AUTH_BYTES },
+  async (req, ctx) => {
+    const name = String(ctx.body.name || "").trim();
+    if (!isValidName(name) || name === SYSTEM_WS)
+      fail(
+        400,
+        "Workspace names are 1–128 letters, numbers, spaces and . @ # - _",
+      );
+    const ins = await q(
+      "INSERT INTO vl_workspaces (name, created_at, created_by) VALUES ($1, $2, $3) ON CONFLICT (name) DO NOTHING RETURNING name",
+      [name, now(), ctx.user.username],
+    );
+    if (!ins.length) fail(409, "A workspace with that name already exists.");
+    await appendAudit(
+      name,
+      ctx.user,
+      "WORKSPACE_CREATE",
+      ctx.user.username + " created workspace " + name,
+    );
+    return { status: 201, body: { name } };
+  },
+);
+
+route("DELETE", "/api/workspaces/:ws", { roles: [ADMIN] }, async (req, ctx) => {
+  await requireWorkspace(ctx.params.ws);
+  await q("DELETE FROM vl_workspaces WHERE name = $1", [ctx.params.ws]);
+  await appendAudit(
+    ctx.params.ws,
+    ctx.user,
+    "WORKSPACE_DELETE",
+    ctx.user.username + " deleted workspace " + ctx.params.ws,
+  );
+  return { body: { ok: true } };
+});
+
+/* stores: whole-document, optimistic versions */
+route("GET", "/api/stores/:ws", {}, async (req, ctx) => {
+  await requireWorkspace(ctx.params.ws);
+  const rows = await q(
+    "SELECT name, value, version FROM vl_stores WHERE workspace = $1 AND (name NOT LIKE 'prefs@%' OR name = $2)",
+    [ctx.params.ws, prefsRow(ctx.user)],
+  );
+  const out = {};
+  for (const r of rows) {
+    if (r.name.startsWith("prefs@"))
+      out.prefs = {
+        data: { [ctx.user.username]: JSON.parse(r.value) },
+        version: +r.version,
+      };
+    else out[r.name] = { data: JSON.parse(r.value), version: +r.version };
+  }
+  return { body: out };
+});
+
+route("PUT", "/api/stores/:ws/:name", {}, async (req, ctx) => {
+  const { ws, name } = ctx.params;
+  if (!STORE_NAMES.includes(name)) fail(404, "Unknown store");
+  if (!canWriteStore(ctx.user, name))
+    fail(403, "Your role (" + ctx.user.role + ") can't change " + name + ".");
+  await requireWorkspace(ws);
+  const b = ctx.body;
+  if (name === "prefs") {
+    /* only the caller's own slice is stored; last write wins (it's one person's view settings) */
+    const mine =
+      b.data && typeof b.data === "object" ? b.data[ctx.user.username] : null;
+    const json = JSON.stringify(mine === undefined ? null : mine);
+    const r = await q(
+      `INSERT INTO vl_stores (workspace, name, value, version, updated_at, updated_by) VALUES ($1, $2, $3, 1, $4, $5)
+       ON CONFLICT (workspace, name) DO UPDATE SET value = $3, version = vl_stores.version + 1, updated_at = $4 RETURNING version`,
+      [ws, prefsRow(ctx.user), json, now(), ctx.user.username],
+    );
+    return { body: { version: +r[0].version } };
+  }
+  const want = parseVersion(b.version);
+  if (name === "remediation" || name === "engagement") {
+    const cur = (
+      await q(
+        "SELECT value, version, updated_by FROM vl_stores WHERE workspace = $1 AND name = $2",
+        [ws, name],
+      )
+    )[0];
+    /* only validate against the version the client is replacing; a stale version gets the normal 409 below */
+    if ((cur ? +cur.version : 0) === want) {
+      const old = cur ? JSON.parse(cur.value) : null;
+      const pRow = (
+        await q(
+          "SELECT value FROM vl_stores WHERE workspace = $1 AND name = 'policy'",
+          [ws],
+        )
+      )[0];
+      const policy = pRow ? JSON.parse(pRow.value) : null;
+      if (name === "remediation") {
+        const sRow = (
+          await q(
+            "SELECT value FROM vl_stores WHERE workspace = $1 AND name = 'scans'",
+            [ws],
+          )
+        )[0];
+        checkRemediation(
+          old,
+          b.data,
+          ctx.user,
+          policy,
+          findingFacts(sRow ? JSON.parse(sRow.value) : null),
+          now().slice(0, 10),
+        );
+      } else
+        checkEngagement(
+          old,
+          b.data,
+          ctx.user,
+          policy,
+          cur ? cur.updated_by : null,
+        );
+    }
+  }
+  const version = await putVersioned(
+    "vl_stores",
+    "name",
+    ws,
+    name,
+    b.data,
+    want,
+    ctx.user,
+  );
+  return { body: { version } };
+});
+
+/* evidence: one list of images per finding key */
+route("GET", "/api/evidence/:ws", {}, async (req, ctx) => {
+  await requireWorkspace(ctx.params.ws);
+  return {
+    body: (
+      await q("SELECT key FROM vl_evidence WHERE workspace = $1 ORDER BY key", [
+        ctx.params.ws,
+      ])
+    ).map((r) => r.key),
+  };
+});
+
+route("GET", "/api/evidence/:ws/:key", {}, async (req, ctx) => {
+  await requireWorkspace(ctx.params.ws);
+  if (!isValidKey(ctx.params.key)) fail(400, "Bad evidence key");
+  const r = (
+    await q(
+      "SELECT value, version FROM vl_evidence WHERE workspace = $1 AND key = $2",
+      [ctx.params.ws, ctx.params.key],
+    )
+  )[0];
+  return {
+    body: r
+      ? { data: JSON.parse(r.value), version: +r.version }
+      : { data: [], version: 0 },
+  };
+});
+
+route(
+  "PUT",
+  "/api/evidence/:ws/:key",
+  { roles: [ADMIN, LEAD] },
+  async (req, ctx) => {
+    await requireWorkspace(ctx.params.ws);
+    if (!isValidKey(ctx.params.key)) fail(400, "Bad evidence key");
+    if (!Array.isArray(ctx.body.data)) fail(400, "Evidence is a list.");
+    const version = await putVersioned(
+      "vl_evidence",
+      "key",
+      ctx.params.ws,
+      ctx.params.key,
+      ctx.body.data,
+      parseVersion(ctx.body.version),
+      ctx.user,
+    );
+    return { body: { version } };
+  },
+);
+
+/* audit */
+route("GET", "/api/audit/:ws", {}, async (req, ctx) => {
+  const ws = ctx.params.ws;
+  if (ws === SYSTEM_WS) requireRole(ctx.user, [ADMIN]);
+  else await requireWorkspace(ws);
+  const limit = Math.min(
+    5000,
+    Math.max(1, +(ctx.url.searchParams.get("limit") || 2000) || 2000),
+  );
+  const rows = await q(
+    "SELECT * FROM vl_audit WHERE workspace = $1 ORDER BY seq DESC LIMIT " +
+      limit,
+    [ws],
+  );
+  const total = +(
+    await q("SELECT COUNT(*) AS n FROM vl_audit WHERE workspace = $1", [ws])
+  )[0].n;
+  return { body: { entries: rows.map(clientAuditEntry), total } };
+});
+
+route("POST", "/api/audit/:ws", { limit: 256 * 1024 }, async (req, ctx) => {
+  await requireWorkspace(ctx.params.ws);
+  const b = ctx.body;
+  if (typeof b.action !== "string" || !/^[A-Z0-9_-]{1,64}$/.test(b.action))
+    fail(400, "Bad audit action");
+  if (
+    b.detail != null &&
+    (typeof b.detail !== "string" || b.detail.length > 4000)
+  )
+    fail(400, "Audit detail is text up to 4000 characters.");
+  const ref = b.ref;
+  const refOk =
+    ref == null ||
+    (typeof ref === "string" && ref.length <= 512) ||
+    (Array.isArray(ref) &&
+      ref.length <= 50 &&
+      ref.every((x) => typeof x === "string" && x.length <= 512));
+  if (!refOk) fail(400, "Bad audit ref");
+  const e = await appendAudit(ctx.params.ws, ctx.user, b.action, b.detail, ref);
+  return { status: 201, body: clientAuditEntry(e) };
+});
+
+route("GET", "/api/audit/:ws/verify", {}, async (req, ctx) => {
+  if (ctx.params.ws === SYSTEM_WS) requireRole(ctx.user, [ADMIN]);
+  else await requireWorkspace(ctx.params.ws);
+  return { body: await verifyAuditChain(ctx.params.ws) };
+});
+
+/* full workspace backup / restore (admin) */
+route(
+  "GET",
+  "/api/workspaces/:ws/export",
+  { roles: [ADMIN] },
+  async (req, ctx) => {
+    const ws = ctx.params.ws;
+    await requireWorkspace(ws);
+    const stores = {};
+    for (const r of await q(
+      "SELECT name, value FROM vl_stores WHERE workspace = $1 AND name NOT LIKE 'prefs@%'",
+      [ws],
+    ))
+      stores[r.name] = JSON.parse(r.value);
+    const evidence = {};
+    for (const r of await q(
+      "SELECT key, value FROM vl_evidence WHERE workspace = $1",
+      [ws],
+    ))
+      evidence[r.key] = JSON.parse(r.value);
+    await appendAudit(
+      ws,
+      ctx.user,
+      "BACKUP",
+      ctx.user.username + " exported a full backup",
+    );
+    return {
+      body: {
+        app: "VAPTLens",
+        format: 2,
+        workspace: ws,
+        exportedAt: now(),
+        stores,
+        evidence,
+      },
+    };
+  },
+);
+
+route(
+  "POST",
+  "/api/workspaces/:ws/import",
+  { roles: [ADMIN] },
+  async (req, ctx) => {
+    const ws = ctx.params.ws;
+    await requireWorkspace(ws);
+    const b = ctx.body;
+    if (
+      b.app !== "VAPTLens" ||
+      b.format !== 2 ||
+      typeof b.stores !== "object" ||
+      !b.stores
+    )
+      fail(400, "This isn't a VAPTLens backup (format 2).");
+    const names = Object.keys(b.stores).filter(
+      (n) => STORE_NAMES.includes(n) && n !== "prefs",
+    );
+    const ev = b.evidence && typeof b.evidence === "object" ? b.evidence : {};
+    const evKeys = Object.keys(ev).filter(
+      (k) => isValidKey(k) && Array.isArray(ev[k]),
+    );
+    const t0 = now();
+    await tx(async (t) => {
+      await t(
+        "DELETE FROM vl_stores WHERE workspace = $1 AND name NOT LIKE 'prefs@%'",
+        [ws],
+      );
+      await t("DELETE FROM vl_evidence WHERE workspace = $1", [ws]);
+      for (const n of names)
+        await t(
+          "INSERT INTO vl_stores (workspace, name, value, version, updated_at, updated_by) VALUES ($1,$2,$3,1,$4,$5)",
+          [ws, n, JSON.stringify(b.stores[n]), t0, ctx.user.username],
+        );
+      for (const k of evKeys)
+        await t(
+          "INSERT INTO vl_evidence (workspace, key, value, version, updated_at, updated_by) VALUES ($1,$2,$3,1,$4,$5)",
+          [ws, k, JSON.stringify(ev[k]), t0, ctx.user.username],
+        );
+    });
+    await appendAudit(
+      ws,
+      ctx.user,
+      "RESTORE",
+      ctx.user.username +
+        " restored a backup from " +
+        (b.exportedAt || "?") +
+        " (" +
+        names.length +
+        " stores, " +
+        evKeys.length +
+        " evidence sets)",
+    );
+    return {
+      body: { ok: true, stores: names.length, evidence: evKeys.length },
+    };
+  },
+);
+
+/* ---------- request handler ---------- */
+export async function handler(req, res) {
+  const started = Date.now();
+  const ctx = { route: "?", user: null };
+  try {
+    if (req.method === "OPTIONS") {
+      res.writeHead(405, { Allow: "GET, POST, PUT, PATCH, DELETE" });
+      return res.end();
+    }
+    if (!hostAllowed(req))
+      return send(res, 421, {
+        error: "Unknown host. Add it to ALLOWED_HOSTS on the server.",
+      });
+    if (crossSiteBlocked(req))
+      return send(res, 403, { error: "Cross-site requests are not allowed" });
+    /* writes must be JSON: a plain HTML form or text/plain beacon can't reach a mutating route */
+    if (
+      /^(POST|PUT|PATCH)$/.test(req.method) &&
+      !/^application\/json\b/i.test(req.headers["content-type"] || "")
+    )
+      return send(res, 415, {
+        error: "Send JSON (Content-Type: application/json)",
+      });
+
+    const url = new URL(req.url || "/", "http://localhost");
+    ctx.url = url;
+    if (url.pathname === "/api/health") {
+      ctx.route = "/api/health";
+      if (req.method !== "GET")
+        return send(res, 405, { error: "Method not allowed" });
+      try {
+        await q("SELECT 1 AS ok");
+        return send(res, 200, { ok: true });
+      } catch (e) {
+        return send(res, 503, { ok: false, error: "database unavailable" });
+      }
+    }
+
+    let match = null;
+    let pathMatched = false;
+    for (const r of routes) {
+      const m = r.re.exec(url.pathname);
+      if (!m) continue;
+      pathMatched = true;
+      if (r.method !== req.method) continue;
+      match = r;
+      ctx.params = {};
+      r.keys.forEach((k, i) => {
+        try {
+          ctx.params[k] = decodeURIComponent(m[i + 1]);
+        } catch (e) {
+          fail(400, "Bad URL");
+        }
+      });
+      break;
+    }
+    if (!match)
+      return send(res, pathMatched ? 405 : 404, {
+        error: pathMatched ? "Method not allowed" : "Not found",
+      });
+    ctx.route = match.method + " " + match.pattern;
+
+    if (match.opts.auth !== false) {
+      const s = await requireSession(req);
+      ctx.user = s.user;
+      ctx.sid = s.sid;
+      if (s.user.must_change && !match.opts.mustChangeOk)
+        fail(403, "Change your temporary password first.", {
+          code: "must_change",
+        });
+      if (match.opts.roles) requireRole(s.user, match.opts.roles);
+    }
+    if (/^(POST|PUT|PATCH)$/.test(req.method))
+      ctx.body = await readJson(req, match.opts.limit);
+
+    const out = await match.fn(req, ctx);
+    send(res, out.status || 200, out.body, out.headers);
+  } catch (e) {
+    if (e instanceof HttpError) {
+      send(
+        res,
+        e.status,
+        Object.assign({ error: e.message }, e.extra || {}),
+        e.status === 401 && readSid(req)
+          ? { "Set-Cookie": sessionCookie(req, "", 0) }
+          : undefined,
+      );
+    } else {
+      log({
+        level: "error",
+        msg: "unhandled",
+        route: ctx.route,
+        err: e && e.stack ? e.stack : String(e),
+      });
+      if (!res.headersSent)
+        send(res, 500, { error: "Something went wrong on the server." });
+      else res.end();
+    }
+  } finally {
+    /* the route pattern is logged, never the raw path: workspace names and evidence keys stay out of the logs */
+    log({
+      method: req.method,
+      route: ctx.route,
+      status: res.statusCode,
+      ms: Date.now() - started,
+      user: ctx.user ? ctx.user.username : undefined,
+    });
+  }
+}
+
+/* ---------- admin CLI + startup ---------- */
+async function cliResetPassword(username) {
+  const u = (
+    await q("SELECT * FROM vl_users WHERE username = $1", [
+      String(username || "").toLowerCase(),
+    ])
+  )[0];
+  if (!u) {
+    console.error("No user named " + username);
+    process.exit(1);
+  }
+  const temp = tempPassword();
+  await q(
+    "UPDATE vl_users SET pw_hash = $1, must_change = 1, failed = 0, locked_until = NULL, disabled = 0 WHERE id = $2",
+    [await hashPassword(temp), u.id],
+  );
+  await q("DELETE FROM vl_sessions WHERE user_id = $1", [u.id]);
+  await appendAudit(
+    SYSTEM_WS,
+    null,
+    "USER_UPDATE",
+    "Password for " + u.username + " reset from the server console",
+  );
+  console.log(
+    "Temporary password for " +
+      u.username +
+      ": " +
+      temp +
+      "\nThey must change it at next sign-in.",
+  );
+}
+
+async function shutdown(server) {
+  log({ msg: "shutting down" });
+  if (server) await new Promise((r) => server.close(r));
+  if (pool) await pool.end().catch(() => {});
+  if (sqlite) sqlite.close();
+  process.exit(0);
+}
+
+const isMain =
+  process.argv[1] &&
+  import.meta.url.endsWith(
+    process.argv[1].replace(/\\/g, "/").split("/").pop(),
+  );
+if (isMain) {
+  if (process.argv[2] === "reset-password") {
+    await cliResetPassword(process.argv[3]);
+    await shutdown(null);
+  } else {
+    const server = createServer((req, res) => {
+      handler(req, res).catch((e) =>
+        log({ level: "error", msg: "handler crashed", err: String(e) }),
+      );
+    });
+    server.listen(PORT, HOST, () =>
+      log({
+        msg: "listening",
+        host: HOST,
+        port: PORT,
+        db: isPostgres ? "postgres" : "sqlite",
+        allowedHosts: ALLOWED_HOSTS,
+      }),
+    );
+    process.on("SIGTERM", () => shutdown(server));
+    process.on("SIGINT", () => shutdown(server));
+  }
+  process.on("unhandledRejection", (e) =>
+    log({
+      level: "error",
+      msg: "unhandledRejection",
+      err: String(e && e.stack ? e.stack : e),
+    }),
+  );
+}
+
+export { q, tx, pool };

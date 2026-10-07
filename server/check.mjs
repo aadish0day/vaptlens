@@ -1,491 +1,941 @@
-/* node server/check.mjs — comprehensive tests for VAPTLens SQLite REST API */
+/* node server/check.mjs — API self-check. SQLite in a temp dir by default; set DATABASE_URL to run it against Postgres
+   (use a throwaway database: the check creates users and workspaces). */
 import assert from "node:assert/strict";
-import { createServer } from "node:http";
+import { createServer, request } from "node:http";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-var testToken = "x".repeat(32);
-delete process.env.DATABASE_URL;
-delete process.env.POSTGRES_URL;
-delete process.env.POSTGRES_HOST;
-process.env.SYNC_TOKEN = testToken;
-process.env.DB_PATH = join(mkdtempSync(join(tmpdir(), "vl-test-")), "test.db");
-
-var { handler, db } = await import("./server.mjs");
-var srv = createServer(handler).listen(0);
-var port = srv.address().port;
-var rootUrl = "http://127.0.0.1:" + port;
-var authHeaders = {
-  Authorization: "Bearer " + testToken,
-  "Content-Type": "application/json",
-};
-
-async function api(path, options = {}) {
-  var headers = Object.assign({}, authHeaders, options.headers || {});
-  var res = await fetch(rootUrl + path, {
-    method: options.method || "GET",
-    headers: headers,
-    body: options.body !== undefined ? (typeof options.body === "string" ? options.body : JSON.stringify(options.body)) : undefined,
-  });
-  var json = null;
-  try {
-    json = await res.json();
-  } catch (e) {}
-  return { status: res.status, ok: res.ok, data: json };
+if (!process.env.DATABASE_URL) {
+  delete process.env.POSTGRES_URL;
+  delete process.env.POSTGRES_HOST;
+  process.env.DB_PATH = join(
+    mkdtempSync(join(tmpdir(), "vl-test-")),
+    "test.db",
+  );
 }
+process.env.VL_QUIET = "1";
+const { handler, verifyAuditChain, q } = await import("./server.mjs");
+const srv = createServer(handler);
+await new Promise((r) => srv.listen(0, "127.0.0.1", r));
+const base = "http://127.0.0.1:" + srv.address().port;
 
-console.log("Running VAPTLens SQLite Backend test suite...");
+/* a tiny cookie-jar client per user */
+function client() {
+  let cookie = "";
+  return async function api(path, o = {}) {
+    const headers = Object.assign(
+      { "Content-Type": "application/json" },
+      cookie ? { Cookie: cookie } : {},
+      o.headers || {},
+    );
+    const res = await fetch(base + path, {
+      method: o.method || "GET",
+      headers,
+      body:
+        o.body === undefined
+          ? undefined
+          : typeof o.body === "string"
+            ? o.body
+            : JSON.stringify(o.body),
+    });
+    const sc = res.headers.get("set-cookie");
+    const m = sc && /vl_sid=([^;]*)/.exec(sc);
+    if (m) cookie = m[1] ? "vl_sid=" + m[1] : "";
+    let data = null;
+    try {
+      data = await res.json();
+    } catch (e) {}
+    return { status: res.status, data };
+  };
+}
+const step = (s) => console.log("-> " + s);
+const PW = "Correct-Horse-9";
 
-// 1. Health check
-console.log("-> Testing /api/health");
-var healthRes = await fetch(rootUrl + "/api/health");
-assert.equal(healthRes.status, 200, "health check status 200");
-var healthJson = await healthRes.json();
-assert.deepEqual(healthJson, { ok: true, db: "sqlite" }, "health check body");
+step("health checks the database");
+assert.equal((await fetch(base + "/api/health")).status, 200);
 
-// 2. Authentication behavior
-console.log("-> Testing authentication enforcement");
-var noAuth = await fetch(rootUrl + "/api/workspaces");
-assert.equal(noAuth.status, 401, "rejects missing token");
-var badAuth = await fetch(rootUrl + "/api/workspaces", {
-  headers: { Authorization: "Bearer wrong-token" },
-});
-assert.equal(badAuth.status, 401, "rejects invalid token");
-
-// 3. Workspaces CRUD
-console.log("-> Testing workspaces CRUD");
-var wsList = await api("/api/workspaces");
-assert.equal(wsList.status, 200);
-assert.ok(Array.isArray(wsList.data), "workspaces is array");
-assert.ok(wsList.data.some(w => w.name === "Default"), "initial Default workspace exists");
-assert.ok("savedAt" in wsList.data[0] && "updated_at" in wsList.data[0], "workspace schema fields");
-
-var createWs = await api("/api/workspaces", {
-  method: "POST",
-  body: { name: "Project-Omega" },
-});
-assert.equal(createWs.status, 201, "workspace created");
-assert.equal(createWs.data.name, "Project-Omega");
-
-var createDuplicate = await api("/api/workspaces", {
-  method: "POST",
-  body: { name: "Project-Omega" },
-});
-assert.equal(createDuplicate.status, 409, "duplicate workspace rejected with 409");
-
-var createInvalid = await api("/api/workspaces", {
-  method: "POST",
-  body: { name: "" },
-});
-assert.equal(createInvalid.status, 400, "empty workspace name rejected with 400");
-
-// 4. Stores CRUD and Synchronization
-console.log("-> Testing stores CRUD & synchronization");
-// Generic store
-var putPrefs = await api("/api/stores/Project-Omega/prefs", {
-  method: "PUT",
-  body: { data: { theme: "cyber", autoRefresh: true } },
-});
-assert.equal(putPrefs.status, 200, "generic store put ok");
-
-var getPrefs = await api("/api/stores/Project-Omega/prefs");
-assert.equal(getPrefs.status, 200);
-assert.deepEqual(getPrefs.data, {
-  name: "prefs",
-  data: { theme: "cyber", autoRefresh: true },
-});
-
-var getAllStores = await api("/api/stores/Project-Omega");
-assert.equal(getAllStores.status, 200);
-assert.deepEqual(getAllStores.data.prefs, { theme: "cyber", autoRefresh: true });
-
-var getNotFound = await api("/api/stores/Project-Omega/nonexistent");
-assert.equal(getNotFound.status, 404, "non-existent store returns 404");
-
-// Scans store & synchronization to batches and findings tables
-console.log("-> Testing scans store synchronization into batches and findings");
-var scansPayload = {
-  batches: [
-    {
-      id: 1,
-      name: "Network Perimeter Scan",
-      tool: "nmap",
-      filename: "perimeter.xml",
-      count: 2,
-      imported_at: "2026-10-05T10:00:00Z",
-      raw_size: 4096,
-      meta: { scope: "external" },
-    },
-  ],
-  data: [
-    {
-      id: "f-101",
-      batch_id: 1,
-      name: "Open SSH Port",
-      host: "192.168.1.50",
-      port: 22,
-      sev: "low",
-      cvss: 3.5,
-      vector: "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N",
-      cves: ["CVE-2023-1111", "CVE-2023-2222"],
-      cwe: ["CWE-200"],
-      pluginId: "nmap-ssh",
-      tool: "nmap",
-      desc: "Port 22 SSH service is accessible",
-      sol: "Restrict access",
-      url: "https://example.com/cve-2023-1111",
-      custom_flag: "retained_in_raw_data",
-    },
-    {
-      id: "f-102",
-      batch_id: 1,
-      name: "Outdated Web Server",
-      host: "192.168.1.50",
-      port: 8080,
-      sev: "critical",
-      cvss: 9.8,
-      vector: "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
-      cves: ["CVE-2021-44228"],
-      cwe: ["CWE-502"],
-      plugin_id: "log4shell",
-      tool: "nmap",
-      desc: "Log4Shell RCE vulnerability detected",
-      sol: "Upgrade immediately",
-      url: "https://logging.apache.org",
-    },
-  ],
-};
-
-var putScans = await api("/api/stores/Project-Omega/scans", {
-  method: "PUT",
-  body: { data: scansPayload },
-});
-assert.equal(putScans.status, 200, "scans store put ok");
-
-// Verify in SQLite tables directly
-var batchRows = db
-  .prepare("SELECT * FROM batches WHERE workspace_id = ?")
-  .all("Project-Omega");
-assert.equal(batchRows.length, 1, "batches row count");
-assert.equal(batchRows[0].id, 1);
-assert.equal(batchRows[0].name, "Network Perimeter Scan");
-assert.equal(batchRows[0].tool, "nmap");
-assert.equal(batchRows[0].filename, "perimeter.xml");
-assert.equal(batchRows[0].count, 2);
-assert.equal(batchRows[0].raw_size, 4096);
-
-var findingRows = db
-  .prepare("SELECT * FROM findings WHERE workspace_id = ? ORDER BY id")
-  .all("Project-Omega");
-assert.equal(findingRows.length, 2, "findings row count");
-
-var f1 = findingRows[0];
-assert.equal(f1.id, "f-101");
-assert.equal(f1.batch_id, 1);
-assert.equal(f1.name, "Open SSH Port");
-assert.equal(f1.host, "192.168.1.50");
-assert.equal(f1.port, 22);
-assert.equal(f1.sev, "low");
-assert.equal(f1.cvss, 3.5);
-assert.equal(f1.cves, "CVE-2023-1111,CVE-2023-2222");
-assert.equal(f1.cwe, "CWE-200");
-assert.equal(f1.plugin_id, "nmap-ssh");
-assert.equal(f1.tool, "nmap");
-assert.ok(f1.raw_data.includes("retained_in_raw_data"), "raw_data preserves full object");
-
-var f2 = findingRows[1];
-assert.equal(f2.id, "f-102");
-assert.equal(f2.sev, "critical");
-assert.equal(f2.cvss, 9.8);
-assert.equal(f2.plugin_id, "log4shell");
-
-// Assets store & synchronization
-console.log("-> Testing assets store synchronization into assets table");
-var assetsPayload = {
-  "192.168.1.50": {
-    criticality: "tier-1",
-    owner: "Security Ops",
-    tags: ["external", "pci"],
-  },
-  "192.168.1.60": {
-    criticality: "tier-3",
-    owner: "Dev Team",
-    tags: ["internal"],
-  },
-};
-var putAssets = await api("/api/stores/Project-Omega/assets", {
-  method: "PUT",
-  body: { data: assetsPayload },
-});
-assert.equal(putAssets.status, 200, "assets store put ok");
-
-var assetRows = db
-  .prepare("SELECT * FROM assets WHERE workspace_id = ? ORDER BY host")
-  .all("Project-Omega");
-assert.equal(assetRows.length, 2, "assets row count");
-assert.equal(assetRows[0].host, "192.168.1.50");
-assert.equal(assetRows[0].criticality, "tier-1");
-assert.equal(assetRows[0].owner, "Security Ops");
-assert.equal(assetRows[0].tags, "external,pci");
-
-// Assets store with array format & raw payload test
-var putAssetsArray = await api("/api/stores/Project-Omega/assets", {
-  method: "PUT",
-  body: [
-    {
-      host: "10.0.0.99",
-      criticality: "critical",
-      owner: "DevOps",
-      tags: ["k8s", "cluster"],
-    },
-  ],
-});
-assert.equal(putAssetsArray.status, 200, "assets array put ok");
-var assetArrayRows = db
-  .prepare("SELECT * FROM assets WHERE workspace_id = ? AND host = ?")
-  .all("Project-Omega", "10.0.0.99");
-assert.equal(assetArrayRows.length, 1, "array asset inserted");
-assert.equal(assetArrayRows[0].criticality, "critical");
-
-// Audit store & synchronization
-console.log("-> Testing audit store synchronization into audit_log table");
-var auditPayload = [
-  {
-    action: "IMPORT_SCAN",
-    detail: "Imported perimeter.xml",
-    role: "admin",
-    at: "2026-10-05T10:05:00Z",
-    prev: null,
-    user: "alice@vaptlens",
-    hash: "hash-001",
-    ref: "batch-1",
-  },
-  {
-    action: "UPDATE_STATUS",
-    detail: "Marked f-101 as accepted risk",
-    role: "admin",
-    at: "2026-10-05T10:10:00Z",
-    prev: "hash-001",
-    user: "alice@vaptlens",
-    hash: "hash-002",
-    ref: "f-101",
-  },
-];
-var putAudit = await api("/api/stores/Project-Omega/audit", {
-  method: "PUT",
-  body: { data: auditPayload },
-});
-assert.equal(putAudit.status, 200, "audit store put ok");
-
-var auditRows = db
-  .prepare("SELECT * FROM audit_log WHERE workspace_id = ? ORDER BY id")
-  .all("Project-Omega");
-assert.equal(auditRows.length, 2, "audit_log row count");
-assert.equal(auditRows[0].action, "IMPORT_SCAN");
-assert.equal(auditRows[0].user, "alice@vaptlens");
-assert.equal(auditRows[0].hash, "hash-001");
-assert.equal(auditRows[1].ref, "f-101");
-
-// Delete store (scans should clear batches and findings)
-console.log("-> Testing store deletion");
-var delScans = await api("/api/stores/Project-Omega/scans", { method: "DELETE" });
-assert.equal(delScans.status, 200);
+step("fresh install needs setup; nothing else is reachable");
+const admin = client();
+assert.deepEqual((await admin("/api/auth/state")).data, { setupNeeded: true });
+assert.equal((await admin("/api/workspaces")).status, 401);
 assert.equal(
-  db.prepare("SELECT COUNT(*) AS c FROM batches WHERE workspace_id = ?").get("Project-Omega").c,
-  0,
-  "batches cleared after scans deleted"
-);
-assert.equal(
-  db.prepare("SELECT COUNT(*) AS c FROM findings WHERE workspace_id = ?").get("Project-Omega").c,
-  0,
-  "findings cleared after scans deleted"
+  (
+    await admin("/api/auth/setup", {
+      method: "POST",
+      body: { username: "root", password: "short" },
+    })
+  ).status,
+  400,
 );
 
-// 5. Evidence CRUD
-console.log("-> Testing evidence CRUD");
-var getEvEmpty = await api("/api/evidence/Project-Omega/f-101");
-assert.equal(getEvEmpty.status, 200);
-assert.deepEqual(getEvEmpty.data, { key: "f-101", data: [] });
+step("setup creates the admin, a session and the Default workspace");
+const s = await admin("/api/auth/setup", {
+  method: "POST",
+  body: { username: "Root", name: "Root User", password: PW },
+});
+assert.equal(s.status, 200);
+assert.equal(s.data.user.role, "Administrator");
+assert.equal(s.data.user.username, "root");
+assert.equal(
+  (
+    await client()("/api/auth/setup", {
+      method: "POST",
+      body: { username: "evil", password: PW },
+    })
+  ).status,
+  409,
+  "setup only once",
+);
+assert.deepEqual(
+  (await admin("/api/workspaces")).data.map((w) => w.name),
+  ["Default"],
+);
 
-var putEv = await api("/api/evidence/Project-Omega/f-101", {
-  method: "PUT",
+step("host allowlist and cross-site guard");
+const rebound = await new Promise((r) =>
+  request(
+    base + "/api/health",
+    { headers: { Host: "attacker.example:8080" } },
+    (res) => r(res.statusCode),
+  ).end(),
+);
+assert.equal(rebound, 421, "DNS-rebinding host refused");
+assert.equal(
+  (
+    await admin("/api/workspaces", {
+      headers: { "Sec-Fetch-Site": "cross-site" },
+    })
+  ).status,
+  403,
+);
+assert.equal(
+  (
+    await admin("/api/workspaces", {
+      method: "POST",
+      body: "{}",
+      headers: { "Content-Type": "text/plain" },
+    })
+  ).status,
+  415,
+);
+
+step("users: add a lead and an auditor with temporary passwords");
+const addLead = await admin("/api/users", {
+  method: "POST",
   body: {
+    username: "lead",
+    name: "Lea",
+    role: "Remediation Lead",
+    password: PW + "x",
+  },
+});
+assert.equal(addLead.status, 201);
+assert.equal(addLead.data.mustChange, true);
+const addAud = await admin("/api/users", {
+  method: "POST",
+  body: { username: "aud", role: "Security Auditor", password: PW + "y" },
+});
+assert.equal(addAud.status, 201);
+assert.equal(
+  (
+    await admin("/api/users", {
+      method: "POST",
+      body: { username: "lead", role: "Security Auditor", password: PW },
+    })
+  ).status,
+  409,
+);
+
+step("login: wrong password, must-change gate, change password");
+const lead = client();
+assert.equal(
+  (
+    await lead("/api/auth/login", {
+      method: "POST",
+      body: { username: "lead", password: "nope" },
+    })
+  ).status,
+  401,
+);
+const li = await lead("/api/auth/login", {
+  method: "POST",
+  body: { username: "lead", password: PW + "x" },
+});
+assert.equal(li.status, 200);
+assert.equal(li.data.mustChange, true);
+assert.equal(li.data.hadFails, 1);
+assert.equal(
+  (await lead("/api/workspaces")).status,
+  403,
+  "temporary password must be changed first",
+);
+assert.equal(
+  (
+    await lead("/api/auth/password", {
+      method: "POST",
+      body: { current: PW + "x", next: "Remediate-Now-22" },
+    })
+  ).status,
+  200,
+);
+assert.equal((await lead("/api/workspaces")).status, 200);
+
+step("lockout after 5 failures");
+const brute = client();
+for (let i = 0; i < 4; i++)
+  assert.equal(
+    (
+      await brute("/api/auth/login", {
+        method: "POST",
+        body: { username: "aud", password: "bad" },
+      })
+    ).status,
+    401,
+  );
+assert.equal(
+  (
+    await brute("/api/auth/login", {
+      method: "POST",
+      body: { username: "aud", password: "bad" },
+    })
+  ).status,
+  423,
+);
+assert.equal(
+  (
+    await brute("/api/auth/login", {
+      method: "POST",
+      body: { username: "aud", password: PW + "y" },
+    })
+  ).status,
+  423,
+  "locked even with the right password",
+);
+const unlocked = await admin("/api/users/" + addAud.data.id, {
+  method: "PATCH",
+  body: { unlock: true, resetPassword: true },
+});
+assert.equal(unlocked.status, 200);
+const auditor = client();
+assert.equal(
+  (
+    await auditor("/api/auth/login", {
+      method: "POST",
+      body: { username: "aud", password: unlocked.data.tempPassword },
+    })
+  ).status,
+  200,
+);
+assert.equal(
+  (
+    await auditor("/api/auth/password", {
+      method: "POST",
+      body: { current: unlocked.data.tempPassword, next: "Read-Only-View-33" },
+    })
+  ).status,
+  200,
+);
+
+step("stores: versions, conflicts and the store allowlist");
+const put = (api, name, data, version) =>
+  api("/api/stores/Default/" + name, {
+    method: "PUT",
+    body: { data, version },
+  });
+assert.equal((await put(admin, "scans", { data: [1] }, 0)).data.version, 1);
+assert.equal((await put(admin, "scans", { data: [1, 2] }, 1)).data.version, 2);
+const stale = await put(lead, "scans", { data: ["stale"] }, 1);
+assert.equal(stale.status, 409, "a stale write is refused");
+assert.deepEqual(stale.data.data, { data: [1, 2] });
+assert.equal(stale.data.version, 2);
+assert.equal(
+  (await put(lead, "scans", { data: [1, 2, 3] }, 2)).data.version,
+  3,
+);
+assert.equal(
+  (await put(admin, "scans", { data: [] }, 0)).status,
+  409,
+  "create-only when version is 0",
+);
+assert.equal((await put(admin, "nonsense", {}, 0)).status, 404);
+assert.equal((await put(admin, "scans", {}, "1")).status, 400);
+const all = (await lead("/api/stores/Default")).data;
+assert.deepEqual(all.scans, { data: { data: [1, 2, 3] }, version: 3 });
+assert.equal((await admin("/api/stores/Nope")).status, 404);
+
+step("roles: auditor is read-only, lead can't touch policy or users");
+assert.equal((await put(auditor, "remediation", {}, 0)).status, 403);
+assert.equal(
+  (
+    await auditor("/api/evidence/Default/k1", {
+      method: "PUT",
+      body: { data: [], version: 0 },
+    })
+  ).status,
+  403,
+);
+assert.equal(
+  (await auditor("/api/workspaces", { method: "POST", body: { name: "X" } }))
+    .status,
+  403,
+);
+assert.equal((await put(lead, "policy", { sod: false }, 0)).status, 403);
+assert.equal((await put(admin, "policy", { sod: true }, 0)).status, 200);
+assert.equal((await lead("/api/users")).status, 403);
+assert.equal(
+  (
+    await lead("/api/users/" + addAud.data.id, {
+      method: "PATCH",
+      body: { role: "Administrator" },
+    })
+  ).status,
+  403,
+);
+assert.equal(
+  (await lead("/api/workspaces/Default", { method: "DELETE" })).status,
+  403,
+);
+assert.equal(
+  (await auditor("/api/stores/Default")).status,
+  200,
+  "auditor can read",
+);
+
+step("prefs are per user, any role, and private");
+assert.equal(
+  (
+    await put(
+      auditor,
+      "prefs",
+      { aud: { cols: ["risk"] }, root: { cols: ["hacked"] } },
+      0,
+    )
+  ).status,
+  200,
+);
+assert.equal(
+  (await put(admin, "prefs", { root: { cols: ["mine"] } }, 0)).status,
+  200,
+);
+assert.deepEqual((await auditor("/api/stores/Default")).data.prefs.data, {
+  aud: { cols: ["risk"] },
+});
+assert.deepEqual((await admin("/api/stores/Default")).data.prefs.data, {
+  root: { cols: ["mine"] },
+});
+
+step("evidence: list keys, versioned writes");
+assert.deepEqual((await lead("/api/evidence/Default/a%7C1")).data, {
+  data: [],
+  version: 0,
+});
+assert.equal(
+  (
+    await lead("/api/evidence/Default/a%7C1", {
+      method: "PUT",
+      body: { data: [{ img: "x" }], version: 0 },
+    })
+  ).data.version,
+  1,
+);
+assert.equal(
+  (
+    await admin("/api/evidence/Default/a%7C1", {
+      method: "PUT",
+      body: { data: [], version: 0 },
+    })
+  ).status,
+  409,
+);
+assert.deepEqual((await admin("/api/evidence/Default")).data, ["a|1"]);
+
+step("audit: server stamps the user, chain verifies, nobody can rewrite it");
+const a1 = await lead("/api/audit/Default", {
+  method: "POST",
+  body: { action: "ACCEPT_RISK", detail: "accepted X", ref: "a|1" },
+});
+assert.equal(a1.status, 201);
+assert.equal(a1.data.user, "lead");
+assert.equal(a1.data.role, "Remediation Lead");
+assert.equal(
+  (
+    await auditor("/api/audit/Default", {
+      method: "POST",
+      body: { action: "EXPORT", detail: "pdf" },
+    })
+  ).status,
+  201,
+);
+assert.equal(
+  (
+    await lead("/api/audit/Default", {
+      method: "POST",
+      body: { action: "bad action!" },
+    })
+  ).status,
+  400,
+);
+const log1 = (await auditor("/api/audit/Default")).data;
+assert.equal(log1.entries[0].action, "EXPORT");
+assert.equal(log1.entries[0].user, "aud");
+assert.deepEqual((await admin("/api/audit/Default/verify")).data.ok, true);
+assert.equal(
+  (await lead("/api/audit/_system")).status,
+  403,
+  "system log is admin-only",
+);
+const sys = (await admin("/api/audit/_system")).data.entries.map(
+  (e) => e.action,
+);
+assert.ok(
+  sys.includes("LOGIN_FAILED") &&
+    sys.includes("USER_ADD") &&
+    sys.includes("SETUP"),
+);
+await q(
+  "UPDATE vl_audit SET detail = 'edited' WHERE workspace = 'Default' AND seq = 2",
+);
+assert.equal(
+  (await verifyAuditChain("Default")).ok,
+  false,
+  "tampering in the DB is detected",
+);
+
+step("workspaces: create, backup, restore, delete keeps audit");
+assert.equal(
+  (
+    await lead("/api/workspaces", {
+      method: "POST",
+      body: { name: "Client A" },
+    })
+  ).status,
+  201,
+);
+assert.equal(
+  (
+    await lead("/api/workspaces", {
+      method: "POST",
+      body: { name: "Client A" },
+    })
+  ).status,
+  409,
+);
+assert.equal(
+  (await lead("/api/workspaces", { method: "POST", body: { name: "../x" } }))
+    .status,
+  400,
+);
+assert.equal(
+  (await lead("/api/workspaces", { method: "POST", body: { name: "_system" } }))
+    .status,
+  400,
+);
+const bk = await admin("/api/workspaces/Default/export");
+assert.equal(bk.status, 200);
+assert.deepEqual(bk.data.evidence, { "a|1": [{ img: "x" }] });
+assert.equal(bk.data.stores.prefs, undefined, "prefs stay out of backups");
+assert.equal((await lead("/api/workspaces/Default/export")).status, 403);
+const rs = await admin("/api/workspaces/Client%20A/import", {
+  method: "POST",
+  body: bk.data,
+});
+assert.deepEqual(rs.data, { ok: true, stores: 2, evidence: 1 });
+assert.deepEqual((await lead("/api/stores/Client%20A")).data.scans.data, {
+  data: [1, 2, 3],
+});
+assert.equal(
+  (await admin("/api/workspaces/Client%20A", { method: "DELETE" })).status,
+  200,
+);
+assert.equal((await lead("/api/stores/Client%20A")).status, 404);
+assert.ok(
+  (await admin("/api/audit/Client%20A/verify")).status === 404,
+  "deleted workspace is gone from the API",
+);
+assert.ok(
+  (
+    await q("SELECT COUNT(*) AS n FROM vl_audit WHERE workspace = 'Client A'")
+  )[0].n > 0,
+  "but its audit rows remain",
+);
+
+step(
+  "governance: separation of duties, two-person rule, policy limits — enforced by the server",
+);
+assert.equal(
+  (await admin("/api/workspaces", { method: "POST", body: { name: "Gov" } }))
+    .status,
+  201,
+);
+const addA2 = await admin("/api/users", {
+  method: "POST",
+  body: {
+    username: "root2",
+    role: "Administrator",
+    password: PW + "z",
+    mustChange: false,
+  },
+});
+const admin2 = client();
+assert.equal(
+  (
+    await admin2("/api/auth/login", {
+      method: "POST",
+      body: { username: "root2", password: PW + "z" },
+    })
+  ).status,
+  200,
+);
+const gput = (api, name, data, version) =>
+  api("/api/stores/Gov/" + name, { method: "PUT", body: { data, version } });
+const gver = async (name) =>
+  ((await admin("/api/stores/Gov")).data[name] || { version: 0 }).version;
+const gdata = async (name) =>
+  ((await admin("/api/stores/Gov")).data[name] || {}).data;
+await gput(
+  admin,
+  "scans",
+  {
+    v: 2,
     data: [
-      { id: "ev-1", caption: "Terminal screenshot", file: "data:image/png;base64,iVBORw..." },
-      { id: "ev-2", caption: "Raw banner output", text: "SSH-2.0-OpenSSH_8.2p1" },
+      {
+        key: "crit|kev",
+        sev: "critical",
+        cves: ["CVE-2021-44228"],
+        name: "Log4Shell",
+      },
+      { key: "low|1", sev: "low", cves: [], name: "Banner disclosure" },
     ],
   },
-});
-assert.equal(putEv.status, 200, "put evidence ok");
-
-var getEv = await api("/api/evidence/Project-Omega/f-101");
-assert.equal(getEv.status, 200);
-assert.equal(getEv.data.key, "f-101");
-assert.equal(getEv.data.data.length, 2);
-assert.equal(getEv.data.data[0].id, "ev-1");
-
-var delEv = await api("/api/evidence/Project-Omega/f-101", { method: "DELETE" });
-assert.equal(delEv.status, 200, "del evidence ok");
-
-var getEvAfterDel = await api("/api/evidence/Project-Omega/f-101");
-assert.equal(getEvAfterDel.status, 200);
-assert.deepEqual(getEvAfterDel.data, { key: "f-101", data: [] });
-
-// 6. Backup and Restore
-console.log("-> Testing backup & restore");
-// Re-put scans and evidence for backup test
-await api("/api/stores/Project-Omega/scans", { method: "PUT", body: { data: scansPayload } });
-await api("/api/evidence/Project-Omega/f-102", {
-  method: "PUT",
-  body: { data: [{ id: "ev-log4j", file: "poc.py" }] },
-});
-
-var backupRes = await api("/api/backup/Project-Omega");
-assert.equal(backupRes.status, 200, "backup ok");
-var snapshot = backupRes.data;
-assert.equal(snapshot.app, "VAPTLens");
-assert.equal(snapshot.workspace, "Project-Omega");
-assert.ok(snapshot.stores.scans, "snapshot contains scans store");
-assert.ok(snapshot.stores.assets, "snapshot contains assets store");
-assert.ok(snapshot.evidence["f-102"], "snapshot contains evidence for f-102");
-
-var restoreRes = await api("/api/restore/Project-Cloned", {
-  method: "POST",
-  body: snapshot,
-});
-assert.equal(restoreRes.status, 200, "restore ok");
-
-// Verify cloned workspace data
-var clonedStores = await api("/api/stores/Project-Cloned");
-assert.equal(clonedStores.status, 200);
-assert.ok(clonedStores.data.scans, "cloned workspace has scans store");
-assert.ok(clonedStores.data.assets, "cloned workspace has assets store");
-
-var clonedBatches = db
-  .prepare("SELECT * FROM batches WHERE workspace_id = ?")
-  .all("Project-Cloned");
-assert.equal(clonedBatches.length, 1, "cloned batches count");
-
-var clonedFindings = db
-  .prepare("SELECT * FROM findings WHERE workspace_id = ?")
-  .all("Project-Cloned");
-assert.equal(clonedFindings.length, 2, "cloned findings count");
-
-var clonedEvidence = await api("/api/evidence/Project-Cloned/f-102");
-assert.equal(clonedEvidence.status, 200);
-assert.equal(clonedEvidence.data.data.length, 1);
-assert.equal(clonedEvidence.data.data[0].id, "ev-log4j");
-
-// 7. Workspace Deletion cascading
-console.log("-> Testing workspace deletion cascading");
-var delWsRes = await api("/api/workspaces/Project-Cloned", { method: "DELETE" });
-assert.equal(delWsRes.status, 200, "workspace delete ok");
-
-assert.equal(
-  db.prepare("SELECT COUNT(*) AS c FROM workspaces WHERE name = ?").get("Project-Cloned").c,
   0,
-  "workspace row removed"
 );
-assert.equal(
-  db.prepare("SELECT COUNT(*) AS c FROM stores WHERE workspace_id = ?").get("Project-Cloned").c,
-  0,
-  "stores rows removed"
-);
-assert.equal(
-  db.prepare("SELECT COUNT(*) AS c FROM batches WHERE workspace_id = ?").get("Project-Cloned").c,
-  0,
-  "batches rows removed"
-);
-assert.equal(
-  db.prepare("SELECT COUNT(*) AS c FROM findings WHERE workspace_id = ?").get("Project-Cloned").c,
-  0,
-  "findings rows removed"
-);
-assert.equal(
-  db.prepare("SELECT COUNT(*) AS c FROM assets WHERE workspace_id = ?").get("Project-Cloned").c,
-  0,
-  "assets rows removed"
-);
-assert.equal(
-  db.prepare("SELECT COUNT(*) AS c FROM audit_log WHERE workspace_id = ?").get("Project-Cloned").c,
-  0,
-  "audit_log rows removed"
-);
-assert.equal(
-  db.prepare("SELECT COUNT(*) AS c FROM evidence WHERE workspace_id = ?").get("Project-Cloned").c,
-  0,
-  "evidence rows removed"
-);
+const day = (n) => {
+  const d = new Date();
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+};
+const withKey = (base, k, v) => Object.assign({}, base || {}, { [k]: v });
+let rem = {};
+const save = async (api, next) => {
+  const r = await gput(api, "remediation", next, await gver("remediation"));
+  if (r.status === 200) rem = next;
+  return r;
+};
 
-var getDeletedWsStores = await api("/api/stores/Project-Cloned");
-assert.equal(getDeletedWsStores.status, 404, "fetching stores for deleted workspace returns 404");
-
-// 8. Backwards compatibility: /api/ws/:name
-console.log("-> Testing backwards compatibility (/api/ws/:name)");
-var baseWsUrl = rootUrl + "/api/ws/Default";
-var snapBlob = JSON.stringify({
-  app: "VAPTLens",
-  localStorage: { "vaptlens.scans.v2.enc": '{"ct":"..."}' },
-  indexedDB: {},
-});
-var putWsLegacy = (version, blob = snapBlob, h = authHeaders) =>
-  fetch(baseWsUrl, {
-    method: "PUT",
-    headers: h,
-    body: JSON.stringify({ version, blob }),
-  });
-
-assert.equal((await fetch(baseWsUrl)).status, 401, "legacy no token");
+const lead2 = lead;
+const leadAccept = await save(
+  lead2,
+  withKey(rem, "low|1", {
+    state: "accepted",
+    until: day(30),
+    approvedBy: "lead",
+  }),
+);
+assert.equal(leadAccept.status, 403, "a lead can't accept risk directly");
+const forged = await save(
+  lead2,
+  withKey(rem, "low|1", {
+    state: "requested",
+    requestedState: "accepted",
+    requestedBy: "root",
+    until: day(30),
+  }),
+);
+assert.equal(forged.status, 403, "can't file a request in someone else's name");
 assert.equal(
-  (await fetch(baseWsUrl, { headers: { Authorization: "Bearer wrong" } })).status,
-  401,
-  "legacy wrong token"
+  (
+    await save(
+      lead2,
+      withKey(rem, "low|1", {
+        state: "requested",
+        requestedState: "accepted",
+        requestedBy: "lead",
+        until: day(30),
+      }),
+    )
+  ).status,
+  200,
 );
 assert.equal(
-  (await fetch(baseWsUrl, { headers: authHeaders })).status,
-  404,
-  "legacy empty workspace returns 404"
-);
-assert.equal(
-  (await putWsLegacy(0, '{"app":"x"}')).status,
+  (
+    await save(
+      admin,
+      withKey(rem, "low|1", {
+        state: "accepted",
+        until: day(30),
+        requestedBy: "lead",
+        approvedBy: "root2",
+      }),
+    )
+  ).status,
   400,
-  "legacy rejects non-snapshots"
+  "approval must be in your own name",
 );
-assert.deepEqual((await (await putWsLegacy(0)).json()).version, 1, "legacy first push");
-assert.equal((await putWsLegacy(0)).status, 409, "legacy stale push is refused");
 assert.equal(
-  (await (await putWsLegacy(1)).json()).version,
-  2,
-  "legacy push from current version"
+  (
+    await save(
+      admin,
+      withKey(rem, "low|1", {
+        state: "accepted",
+        until: day(30),
+        requestedBy: "lead",
+        approvedBy: "root",
+      }),
+    )
+  ).status,
+  200,
+  "admin approves a lead's request",
 );
-var gotLegacy = await (await fetch(baseWsUrl, { headers: authHeaders })).json();
-assert.equal(gotLegacy.version, 2);
-assert.equal(gotLegacy.blob, snapBlob, "legacy round-trip matches");
+
+const selfDirect = await save(
+  admin,
+  withKey(rem, "crit|kev", {
+    state: "accepted",
+    until: day(10),
+    approvedBy: "root",
+  }),
+);
 assert.equal(
-  (await fetch(baseWsUrl.replace("Default", "..%2Fetc"), { headers: authHeaders })).status,
-  404,
-  "legacy bad name returns 404"
+  selfDirect.status,
+  403,
+  "SoD: an admin can't accept risk without someone else's request",
+);
+assert.equal(selfDirect.data.code, "governance");
+assert.equal(
+  (
+    await save(
+      admin,
+      withKey(rem, "crit|kev", {
+        state: "requested",
+        requestedState: "accepted",
+        requestedBy: "root",
+        until: day(10),
+      }),
+    )
+  ).status,
+  200,
+);
+assert.equal(
+  (
+    await save(
+      admin,
+      withKey(rem, "crit|kev", {
+        state: "accepted",
+        until: day(10),
+        requestedBy: "root",
+        approvedBy: "root",
+      }),
+    )
+  ).status,
+  403,
+  "SoD: nobody approves their own request",
+);
+assert.equal(
+  (
+    await save(
+      admin2,
+      withKey(rem, "crit|kev", {
+        state: "accepted",
+        until: day(60),
+        requestedBy: "root",
+        approvedBy: "root2",
+      }),
+    )
+  ).status,
+  400,
+  "critical exceptions are capped by policy (30 days)",
+);
+assert.equal(
+  (
+    await save(
+      admin2,
+      withKey(rem, "crit|kev", {
+        state: "accepted",
+        until: day(10),
+        requestedBy: "root",
+        approvedBy: "root2",
+      }),
+    )
+  ).status,
+  200,
+  "a second admin approves",
+);
+assert.equal(
+  (
+    await save(
+      lead2,
+      withKey(
+        rem,
+        "crit|kev",
+        Object.assign({}, rem["crit|kev"], { until: day(25) }),
+      ),
+    )
+  ).status,
+  403,
+  "a lead can't extend an exception",
+);
+assert.equal(
+  (
+    await save(
+      admin,
+      withKey(
+        rem,
+        "crit|kev",
+        Object.assign({}, rem["crit|kev"], {
+          until: day(25),
+          approvedBy: "root",
+        }),
+      ),
+    )
+  ).status,
+  403,
+  "renewing alone is blocked by SoD",
 );
 
-// 9. Standalone mode (when SYNC_TOKEN is unset)
-console.log("-> Testing standalone mode (no SYNC_TOKEN)");
-delete process.env.SYNC_TOKEN;
-var standaloneRes = await fetch(rootUrl + "/api/workspaces");
-assert.equal(standaloneRes.status, 200, "standalone mode allows request without token");
+assert.equal(
+  (
+    await save(
+      lead2,
+      withKey(
+        rem,
+        "low|1",
+        Object.assign({}, rem["low|1"], {
+          cvssVector: "CVSS:3.1/AV:P/AC:H/PR:H/UI:R/S:U/C:N/I:N/A:N",
+        }),
+      ),
+    )
+  ).status,
+  403,
+  "leads can't re-score",
+);
+assert.equal(
+  (
+    await save(
+      admin,
+      withKey(
+        rem,
+        "low|1",
+        Object.assign({}, rem["low|1"], {
+          cvssVector: "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
+        }),
+      ),
+    )
+  ).status,
+  200,
+);
+assert.equal(
+  (
+    await save(
+      admin,
+      withKey(rem, "vex|1", { state: "fp", by: "VEX", vexId: "CVE-1|lib" }),
+    )
+  ).status,
+  200,
+  "admins can apply VEX suppressions",
+);
+assert.equal(
+  (
+    await save(
+      lead2,
+      withKey(rem, "vex|2", { state: "fp", by: "VEX", vexId: "CVE-2|lib" }),
+    )
+  ).status,
+  403,
+  "leads only request them",
+);
 
-srv.close();
-console.log("All VAPTLens SQLite API checks passed successfully!");
+step("two-person rule when separation of duties is off");
+assert.equal(
+  (await gput(admin, "policy", { sod: false, twoPerson: true }, 0)).status,
+  200,
+);
+const rem2 = Object.assign({}, rem);
+delete rem2["low|1"].approvedBy;
+rem = await gdata("remediation");
+assert.equal(
+  (
+    await save(
+      admin,
+      withKey(rem, "low|2", { state: "fp", approvedBy: "root" }),
+    )
+  ).status,
+  403,
+  "unknown finding is treated as sensitive",
+);
+await gput(
+  admin,
+  "scans",
+  {
+    v: 2,
+    data: [
+      { key: "crit|kev", sev: "critical", cves: ["CVE-2021-44228"] },
+      { key: "low|1", sev: "low", cves: [] },
+      { key: "low|2", sev: "low", cves: [] },
+    ],
+  },
+  await gver("scans"),
+);
+assert.equal(
+  (
+    await save(
+      admin,
+      withKey(rem, "low|2", { state: "fp", approvedBy: "root" }),
+    )
+  ).status,
+  200,
+  "low, non-KEV: one admin is enough",
+);
+assert.equal(
+  (
+    await save(
+      admin,
+      withKey(rem, "crit|kev", { state: "fp", approvedBy: "root" }),
+    )
+  ).status,
+  403,
+  "critical/KEV needs a second person",
+);
 
-/* cross-site protection (added): another website must not drive the API from a user's browser */
-{
-  var { crossSiteBlocked } = await import("./server.mjs");
-  var mk = (h) => ({ headers: h });
-  assert.equal(crossSiteBlocked(mk({ "sec-fetch-site": "cross-site" })), true, "cross-site blocked");
-  assert.equal(crossSiteBlocked(mk({ "sec-fetch-site": "same-site" })), true, "same-site (other port/subdomain) blocked");
-  assert.equal(crossSiteBlocked(mk({ "sec-fetch-site": "same-origin" })), false, "same-origin allowed");
-  assert.equal(crossSiteBlocked(mk({ origin: "https://evil.example", host: "localhost:8080" })), true, "foreign Origin blocked");
-  assert.equal(crossSiteBlocked(mk({ origin: "http://localhost:8080", host: "sync:8787", "x-forwarded-host": "localhost:8080" })), false, "proxied same origin allowed");
-  assert.equal(crossSiteBlocked(mk({})), false, "non-browser clients (curl, tests) allowed");
-  console.log("Cross-site protection checks passed.");
-}
+step(
+  "report approval: admins only, not by the last editor, and edits after approval are refused",
+);
+const eput = (api, data) => gput(api, "engagement", data, null);
+const ever = () => gver("engagement");
+await gput(admin, "policy", { sod: true }, await gver("policy"));
+assert.equal(
+  (
+    await gput(
+      lead2,
+      "engagement",
+      { client: "Acme", status: "Approved", approvedBy: "lead" },
+      0,
+    )
+  ).status,
+  403,
+);
+assert.equal(
+  (await gput(admin, "engagement", { client: "Acme", status: "In review" }, 0))
+    .status,
+  200,
+);
+assert.equal(
+  (
+    await gput(
+      admin,
+      "engagement",
+      { client: "Acme", status: "Approved", approvedBy: "root" },
+      await ever(),
+    )
+  ).status,
+  403,
+  "last editor can't approve",
+);
+assert.equal(
+  (
+    await gput(
+      admin2,
+      "engagement",
+      { client: "Acme", status: "Approved", approvedBy: "root2" },
+      await ever(),
+    )
+  ).status,
+  200,
+);
+assert.equal(
+  (
+    await gput(
+      admin,
+      "engagement",
+      { client: "Acme Corp", status: "Approved", approvedBy: "root2" },
+      await ever(),
+    )
+  ).status,
+  403,
+  "approved report can't be edited silently",
+);
+assert.equal(
+  (
+    await gput(
+      admin,
+      "engagement",
+      { client: "Acme Corp", status: "In review" },
+      await ever(),
+    )
+  ).status,
+  200,
+);
+void eput;
+void rem2;
+
+step("disabling a user ends their session at once");
+assert.equal(
+  (
+    await admin("/api/users/" + addLead.data.id, {
+      method: "PATCH",
+      body: { disabled: true },
+    })
+  ).status,
+  200,
+);
+assert.equal((await lead("/api/workspaces")).status, 401);
+assert.equal(
+  (
+    await admin("/api/users/" + addA2.data.id, {
+      method: "PATCH",
+      body: { disabled: true },
+    })
+  ).status,
+  200,
+);
+assert.equal(
+  (
+    await admin("/api/users/" + s.data.user.id, {
+      method: "PATCH",
+      body: { role: "Security Auditor" },
+    })
+  ).status,
+  409,
+  "last admin stays admin",
+);
+assert.equal(
+  (await admin("/api/users/" + s.data.user.id, { method: "DELETE" })).status,
+  409,
+);
+
+step("idle timeout signs people out on the server");
+await q("UPDATE vl_sessions SET last_seen = '2000-01-01T00:00:00.000Z'");
+const idle = await auditor("/api/workspaces");
+assert.equal(idle.status, 401);
+assert.equal(idle.data.code, "idle");
+
+step("logout clears the session");
+const again = client();
+await again("/api/auth/login", {
+  method: "POST",
+  body: { username: "root", password: PW },
+});
+assert.equal((await again("/api/workspaces")).status, 200);
+await again("/api/auth/logout", { method: "POST", body: {} });
+assert.equal((await again("/api/workspaces")).status, 401);
+
+step("a database error is a 500, not a crash");
+await q("DROP TABLE vl_evidence");
+const boom = await again("/api/auth/login", {
+  method: "POST",
+  body: { username: "root", password: PW },
+}).then(() => again("/api/evidence/Default"));
+assert.equal(boom.status, 500);
+assert.equal(
+  boom.data.error,
+  "Something went wrong on the server.",
+  "no internals leak",
+);
+assert.equal(
+  (await fetch(base + "/api/health")).status,
+  200,
+  "server still up",
+);
+
+console.log("All API checks passed.");
+process.exit(0);

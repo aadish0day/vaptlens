@@ -8,19 +8,37 @@ export function Evidence(p) {
     list = ev[0],
     inp = useRef(null),
     big = useState(null);
+  /* undefined = loading, null = couldn't load (adding is disabled so nothing overwrites what we didn't see) */
+  var rl = useState(0);
   useEffect(
     function () {
       var live = true;
-      P.evidence(p.fkey).then(function (x) {
-        /* undefined = still loading, null = vault locked, array = the evidence */
-        if (live) ev[1](x === undefined ? null : x);
-      });
+      ev[1](undefined);
+      P.evidence(p.fkey).then(
+        function (x) {
+          if (live) ev[1](x || []);
+        },
+        function () {
+          if (live) ev[1](null);
+        },
+      );
       return function () {
         live = false;
       };
     },
-    [p.fkey],
+    [p.fkey, rl[0]],
   );
+  /* a failed save: tell the user and show what the server actually has */
+  function saveFailed(e) {
+    p.ctx.toast({
+      title: "Evidence not saved",
+      message: e.message,
+      tone: "danger",
+    });
+    rl[1](function (x) {
+      return x + 1;
+    });
+  }
   function add(files) {
     Promise.all(
       Array.prototype.slice
@@ -49,13 +67,7 @@ export function Evidence(p) {
           );
         });
       })
-      .catch(function (e) {
-        p.ctx.toast({
-          title: "Couldn't add evidence",
-          message: e.message,
-          tone: "danger",
-        });
-      });
+      .catch(saveFailed);
     if (inp.current) inp.current.value = "";
   }
   function del(id) {
@@ -66,8 +78,9 @@ export function Evidence(p) {
         return x.id !== id;
       });
     ev[1](n);
-    P.setEvidence(p.fkey, n);
-    p.ctx.log("EVIDENCE", "Screenshot removed from " + p.name);
+    P.setEvidence(p.fkey, n).then(function () {
+      p.ctx.log("EVIDENCE", "Screenshot removed from " + p.name);
+    }, saveFailed);
     var tid = p.ctx.toast({
       title: "Screenshot removed",
       action: {
@@ -80,9 +93,10 @@ export function Evidence(p) {
               ? cur
               : (cur || []).concat([gone]);
             ev[1](back);
-            return P.setEvidence(p.fkey, back);
-          });
-          p.ctx.log("UNDO", "Screenshot restored on " + p.name);
+            return P.setEvidence(p.fkey, back).then(function () {
+              p.ctx.log("UNDO", "Screenshot restored on " + p.name);
+            });
+          }).catch(saveFailed);
           p.ctx.dropToast(tid);
         },
       },
@@ -92,7 +106,16 @@ export function Evidence(p) {
   if (list === null)
     return (
       <span className="up-help">
-        Evidence is encrypted — sign in to view or add screenshots.
+        Couldn't load the evidence for this finding.{" "}
+        <button
+          type="button"
+          className="up-edit"
+          onClick={function () {
+            rl[1](rl[0] + 1);
+          }}
+        >
+          Try again
+        </button>
       </span>
     );
   return (

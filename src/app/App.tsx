@@ -20,6 +20,7 @@ import { EMPTY_FILTERS } from "@/app/lib/filters";
 import { vlLabel } from "@/app/lib/integrations";
 import { ThemePicker } from "@/app/shell/ThemePicker";
 import { signOut } from "@/app/shell/utils";
+import { sampleNs } from "@/app/assistant/utils";
 import { Upload } from "@/app/upload/Upload";
 import { MyPasswordModal } from "@/app/users/MyPasswordModal";
 import { UsersModal } from "@/app/users/UsersModal";
@@ -58,7 +59,7 @@ import {
   sourcesOf,
   threatIndex,
 } from "@/lib/engine";
-import { AUDIT_CAP, IDB, P, auditEntryHash } from "@/lib/store";
+import { AUDIT, AUDIT_CAP, IDB, P, api } from "@/lib/store";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import ReactDOM from "react-dom";
 import * as V from "@/ui";
@@ -103,14 +104,13 @@ export function App(props) {
   });
   var batchesNow = useRef(batchesRaw);
   batchesNow.current = batchesRaw;
-  /* per-user preferences (filters, saved views, dashboard layout) are stored encrypted with the workspace, never in plaintext;
-     older plaintext copies are moved in once and deleted */
+  /* per-user preferences (filters, saved views, dashboard layout): the server keeps one private copy per user */
   var legacyGone = useRef(false),
     prefsAll = useRef(boot.prefs || {}),
     myPrefs = useMemo(function () {
       var mp0 = (boot.prefs || {})[me.username];
       if (mp0) return mp0;
-      /* shared legacy views/layout are copied (not taken) so every user gets them; this user's plaintext filters go once the encrypted copy saves */
+      /* first sign-in: start from any older settings left in this browser */
       return {
         filters: store("vaptlens.filters." + me.username),
         views: store("vaptlens.views.v1"),
@@ -239,13 +239,20 @@ export function App(props) {
     }),
     report = rpt[0],
     setReport = rpt[1];
+  /* SLA windows are workspace policy (stored in the admin-only policy store, so everyone measures against the same
+     numbers); older per-browser settings are picked up once */
   var sl = useState(function () {
-      return Object.assign({}, SLA_DEFAULTS, store("vaptlens.sla.v1") || {});
+      return Object.assign(
+        {},
+        SLA_DEFAULTS,
+        (boot.policy && boot.policy.sla) || store("vaptlens.sla.v1") || {},
+      );
     }),
     sla = sl[0],
     setSla = sl[1];
   var stt = useState(function () {
       return (
+        (boot.policy && boot.policy.slaTier) ||
         store("vaptlens.slaTier.v1") || {
           1: {
             critical: 7,
@@ -303,6 +310,8 @@ export function App(props) {
     filters = fl[0],
     setFilters = fl[1];
   var readOnly = role === "Security Auditor";
+  P.readOnly = readOnly;
+  P.isAdmin = role === "Administrator";
   var auditChain = useRef(Promise.resolve());
   useEffect(function () {
     IDB.get("intel").then(function (x) {
@@ -314,24 +323,18 @@ export function App(props) {
       if (theme === "auto") document.documentElement.removeAttribute("data-vt");
       else document.documentElement.setAttribute("data-vt", theme);
       store("vaptlens-theme", theme);
+      /* browser chrome (mobile address bar, PWA title bar) follows the chosen theme's canvas */
+      var canvas = getComputedStyle(document.documentElement).getPropertyValue("--canvas").trim();
+      if (canvas)
+        [].forEach.call(document.querySelectorAll('meta[name="theme-color"]'), function (m) {
+          if (!m.hasAttribute("data-default")) m.setAttribute("data-default", m.getAttribute("content") || "");
+          m.setAttribute("content", theme === "auto" ? m.getAttribute("data-default") : canvas);
+        });
     },
     [theme],
   );
   useEffect(function () {
     var lg = boot.login || {};
-    if (lg.first)
-      log(
-        "SETUP",
-        me.username + " created the first administrator; workspace encrypted",
-      );
-    if (lg.hadFails != null)
-      log(
-        "LOGIN",
-        me.username +
-          " signed in" +
-          (lg.hadFails ? " after " + lg.hadFails + " failed attempt(s)" : "") +
-          (lg.changedPw ? " and set a new password" : ""),
-      );
     if (lg.hadFails)
       toast({
         title: lg.hadFails + " failed sign-in attempt(s) on your account",
@@ -341,13 +344,16 @@ export function App(props) {
           ".",
         tone: "danger",
       });
-    /* idle sign-out */
-    var last = 0;
+    /* idle sign-out: the server ends idle sessions; activity pings it at most once a minute so reading
+       without saving doesn't count as idle, and the screen locks here once the limit passes */
+    var lastAct = Date.now(),
+      lastPing = Date.now();
     function act() {
       var n = Date.now();
-      if (n - last > 20000) {
-        last = n;
-        AUTH.touch();
+      lastAct = n;
+      if (n - lastPing > 60000) {
+        lastPing = n;
+        api("/api/auth/state").catch(function () {});
       }
     }
     ["mousedown", "keydown", "touchstart", "scroll"].forEach(function (ev) {
@@ -356,18 +362,8 @@ export function App(props) {
       });
     });
     var t = setInterval(function () {
-      var st2 = AUTH.store(),
-        idle = ((st2 && st2.idleMinutes) || 15) * 60000,
-        s2 = null;
-      try {
-        s2 = JSON.parse(sessionStorage.getItem("vaptlens.session") || "null");
-      } catch (e) {}
-      if (!s2 || Date.now() - s2.seen > idle)
-        signOut(
-          "Signed out after " +
-            ((st2 && st2.idleMinutes) || 15) +
-            " minutes idle.",
-        );
+      if (Date.now() - lastAct > AUTH.idleMinutes * 60000)
+        signOut("Signed out after " + AUTH.idleMinutes + " minutes idle.");
     }, 30000);
     return function () {
       clearInterval(t);
@@ -376,38 +372,53 @@ export function App(props) {
       });
     };
   }, []);
-  var auditTotal = useRef(
-    (boot.auditHead && boot.auditHead.total) || (boot.audit || []).length,
-  );
-  /* the newest hashed entry: the chain links to this instead of reading it out of a state updater */
-  var lastAuditHash = useRef(
-    ((boot.audit || [])[0] && (boot.audit || [])[0].hash) || "",
-  );
-  /* the head is only advanced once the log itself saved (a failed save must not look like tampering later) */
+  /* error toasts don't follow you to another view (they stay put until dismissed otherwise) */
   useEffect(
     function () {
-      var kept = audit.slice(0, AUDIT_CAP);
-      P.save("audit", kept).then(function (ok) {
-        if (ok === false) {
-          toast({
-            title: "The audit log couldn't be saved",
-            message:
-              "Storage is full or blocked. Export a backup from Data now.",
-            tone: "danger",
-          });
-          return;
-        }
-        if (kept[0] && kept[0].hash)
-          P.save("auditHead", {
-            hash: kept[0].hash,
-            at: kept[0].at,
-            total: auditTotal.current,
-            oldest: kept[kept.length - 1].hash || "",
-          });
+      setToasts(function (x) {
+        return x.some(function (y) {
+          return y.tone === "danger";
+        })
+          ? x.filter(function (y) {
+              return y.tone !== "danger";
+            })
+          : x;
       });
     },
-    [audit],
+    [route],
   );
+  /* the assistant only exists inside claude.ai: show "Ask" only where it works */
+  var ak = useState(false),
+    askOk = ak[0];
+  useEffect(function () {
+    sampleNs().then(
+      function (s) {
+        ak[1](!!s);
+      },
+      function () {},
+    );
+  }, []);
+  /* save status, conflicts and refusals from the storage layer */
+  var svs = useState("saved"),
+    saveState = svs[0];
+  var cf = useState([]),
+    conflicts = cf[0],
+    rf = useState([]),
+    refusals = rf[0];
+  useEffect(function () {
+    return P.on(function (e) {
+      if (e.type === "status") svs[1](e.state);
+      else if (e.type === "conflict")
+        cf[1](function (x) {
+          return x.indexOf(e.store) >= 0 ? x : x.concat([e.store]);
+        });
+      else if (e.type === "refused")
+        rf[1](function (x) {
+          return x.concat([{ store: e.store, message: e.message }]);
+        });
+    });
+  }, []);
+  var auditTotal = useRef(boot.auditTotal || (boot.audit || []).length);
   useEffect(
     function () {
       P.save("remediation", gov);
@@ -484,26 +495,18 @@ export function App(props) {
   );
   useEffect(
     function () {
-      store("vaptlens.sla.v1", sla);
+      setPolicy(function (p0) {
+        if (
+          JSON.stringify(p0.sla) === JSON.stringify(sla) &&
+          JSON.stringify(p0.slaTier) === JSON.stringify(slaTier)
+        )
+          return p0;
+        return Object.assign({}, p0, { sla: sla, slaTier: slaTier });
+      });
     },
-    [sla],
-  );
-  useEffect(
-    function () {
-      store("vaptlens.slaTier.v1", slaTier);
-    },
-    [slaTier],
+    [sla, slaTier],
   );
   useEffect(function () {
-    var f = Object.keys(P.failed);
-    if (f.length)
-      toast({
-        title: "Some stored data couldn't be decrypted",
-        message:
-          f.join(", ") +
-          " — left untouched and not overwritten. Restore a backup if this persists.",
-        tone: "danger",
-      });
     if (boot.rekeyed)
       log(
         "MIGRATE",
@@ -524,7 +527,6 @@ export function App(props) {
     });
   useEffect(
     function () {
-      if ((P.failed as any).prefs) return;
       var mine0 = {
         filters: filters,
         views: views,
@@ -587,18 +589,7 @@ export function App(props) {
         seq: batchIds.current.seq,
         batches: batchesRaw,
         data: slim,
-      }).then(function (ok) {
-        if (!ok)
-          toast({
-            title: "Scans too large to keep after reload",
-            message:
-              "They stay loaded until you close this tab. Export a backup from Data.",
-            tone: "info",
-          });
       });
-      try {
-        localStorage.removeItem("vaptlens.scans.v1");
-      } catch (e) {}
     },
     [raw, batchesRaw, dataDirty],
   );
@@ -650,7 +641,9 @@ export function App(props) {
       closeModals();
       return;
     }
+    /* Back to the entry URL (no hash): that page was the dashboard */
     if (!x && !initial) {
+      setRoute("dashboard");
       setHostDrawer(null);
       setFindingOpen(null);
       return;
@@ -890,15 +883,20 @@ export function App(props) {
       return !x.until || x.until < AS_OF ? "expired" : "accepted";
     return null;
   }
-  /* measure to today, or to the latest scan date if it is in the future */
-  useEffect(() => {
-    var today = localDay();
-    var latestDate = batchesRaw.reduce(function (m, x) {
-      return x.date > m ? x.date : m;
-    }, "");
-    setAS_OF(latestDate > today ? latestDate : today);
-    for (var sk in sla) SLA_DAYS[sk] = sla[sk];
-  }, [batchesRaw, sla]);
+  /* measure to today's local date. Set during render (not in an effect) so the engine never runs with a stale
+     "today"; a timer re-renders after midnight so an open tab rolls over. Future-dated scans never move it. */
+  var tdy = useState(localDay()),
+    today0 = tdy[0];
+  useEffect(function () {
+    var t = setInterval(function () {
+      if (localDay() !== tdy[0]) tdy[1](localDay());
+    }, 60000);
+    return function () {
+      clearInterval(t);
+    };
+  }, [today0]);
+  if (AS_OF !== today0) setAS_OF(today0);
+  for (var sk in sla) SLA_DAYS[sk] = sla[sk];
   /* only the governance fields that change scoring re-run the engine (notes, tags and owners don't) */
   var govSig = Object.keys(gov)
     .map(function (k) {
@@ -942,7 +940,7 @@ export function App(props) {
         },
       });
     },
-    [raw, batchesRaw, intel, assets, sla, slaTier, govSig, AS_OF],
+    [raw, batchesRaw, intel, assets, sla, slaTier, govSig, today0],
   );
   var data = eng.data,
     batches = eng.order,
@@ -1232,6 +1230,13 @@ export function App(props) {
             .then(function () {
               return P.setEvidence(k, []);
             });
+        }).catch(function (e) {
+          /* the copy runs before the clear, so a failure here never loses screenshots */
+          toast({
+            title: "Some evidence wasn't moved to the merged host",
+            message: e.message,
+            tone: "danger",
+          });
         });
       });
       setCampaigns(function (cs) {
@@ -1443,34 +1448,36 @@ export function App(props) {
   }
   /* ref = the finding key an entry is about (hashed into the chain); it powers each finding's activity timeline */
   function log(action, detail, ref?) {
-    var at = nowIso();
-    auditTotal.current++;
-    /* hash outside the state updater (updaters must stay pure and can re-run); the chain settles
-       either way, so a crypto failure can never wedge every later entry behind it */
+    /* the server appends the entry, stamps who/when/role and chains its hash; the log can't be edited from here */
     auditChain.current = auditChain.current.then(function () {
-      var e: any = {
-        action: action,
-        detail: detail,
-        role: role,
-        user: me.username,
-        at: at,
-        prev: lastAuditHash.current,
-      };
-      if (ref) e.ref = ref;
-      return auditEntryHash(e).then(
-        function (hsh) {
-          e.hash = hsh;
-          lastAuditHash.current = hsh;
+      return AUDIT.append(action, detail, ref).then(
+        function (e) {
+          auditTotal.current++;
           setAudit(function (a) {
             return [e].concat(a).slice(0, AUDIT_CAP);
           });
         },
-        function () {},
+        function (err) {
+          if (err && err.status === 401) return;
+          toast({
+            title: "Couldn't record this in the audit log",
+            message: action + ": " + (err && err.message),
+            tone: "danger",
+          });
+        },
       );
     });
   }
+  /* toasts: the timer pauses while the pointer or focus is on them; an Undo gets 15 s and Ctrl/⌘+Z */
+  var toastPaused = useRef(false),
+    lastUndo = useRef(null);
   function toast(t) {
     var id = Math.random();
+    if (t.action && /^undo$/i.test(t.action.label))
+      lastUndo.current = {
+        id: id,
+        run: t.action.onClick,
+      };
     setToasts(function (x) {
       return x
         .concat([
@@ -1483,19 +1490,40 @@ export function App(props) {
         ])
         .slice(-4);
     });
-    if (t.tone !== "danger")
-      setTimeout(
-        function () {
-          setToasts(function (x) {
-            return x.filter(function (y) {
-              return y.id !== id;
-            });
+    if (t.tone !== "danger") {
+      var expire = function () {
+        if (toastPaused.current) {
+          setTimeout(expire, 2000);
+          return;
+        }
+        if (lastUndo.current && lastUndo.current.id === id) lastUndo.current = null;
+        setToasts(function (x) {
+          return x.filter(function (y) {
+            return y.id !== id;
           });
-        },
-        t.action ? 9000 : 5000,
-      );
+        });
+      };
+      setTimeout(expire, t.action ? 15000 : 6000);
+    }
     return id;
   }
+  useEffect(function () {
+    function onKey(e) {
+      if (!(e.ctrlKey || e.metaKey) || e.shiftKey || e.altKey || e.key.toLowerCase() !== "z") return;
+      var el = document.activeElement as HTMLElement;
+      if (el && (/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) || el.isContentEditable)) return;
+      var u = lastUndo.current;
+      if (!u) return;
+      e.preventDefault();
+      lastUndo.current = null;
+      u.run();
+      dropToast(u.id);
+    }
+    window.addEventListener("keydown", onKey);
+    return function () {
+      window.removeEventListener("keydown", onKey);
+    };
+  }, []);
   /* list deletes (campaigns, goals, rules, library): toast with Undo that puts the previous list back */
   function listUndo(setFn, item, title) {
     var id = toast({
@@ -1792,6 +1820,7 @@ export function App(props) {
     [active],
   );
   var ctx: any = {
+    route: route,
     data: data,
     raw: raw,
     batches: batches,
@@ -1807,14 +1836,13 @@ export function App(props) {
     readOnly: readOnly,
     me: me,
     isAdmin: isAdmin,
-    auditHead: boot.auditHead,
+    auditTotal: auditTotal.current,
     g: g,
     patchGov: patchGov,
     log: log,
     toast: toast,
     nextTicket: nextTicket,
     audit: audit,
-    setAudit: setAudit,
     openHost: openHost,
     go: go,
     dash: dash,
@@ -1851,8 +1879,9 @@ export function App(props) {
     clearAll: clearAll,
     deleteBatch: deleteBatch,
     updateBatch: updateBatch,
-    openUpload: function () {
-      setUploadOpen(true);
+    /* optional files: dropped on an empty view, handed straight to the upload dialog */
+    openUpload: function (files) {
+      setUploadOpen(files && files.length ? Array.prototype.slice.call(files) : true);
     },
     openFinding: openFinding,
     showFindings: showFindings,
@@ -1938,6 +1967,17 @@ export function App(props) {
   ctx.viewNo = viewIdx + 1;
   return (
     <div className="console">
+      {/* a button, not href="#main": the hash is the route */}
+      <button
+        type="button"
+        className="skip-link"
+        onClick={function () {
+          var m = document.getElementById("main");
+          if (m) m.focus();
+        }}
+      >
+        Skip to main content
+      </button>
       <aside className="rail">
         <a
           href="#dashboard"
@@ -2078,15 +2118,22 @@ export function App(props) {
       <div className="work">
         <header className="status" aria-label="Workspace status">
           <span
-            className="st-local"
+            className={"st-local is-" + saveState}
+            role="status"
             title={
               "Signed in as " +
               me.username +
-              ". Scan data is parsed, encrypted and kept in this browser. Nothing is uploaded."
+              " (" +
+              role +
+              "). Data is kept on the VAPTLens server."
             }
           >
             <span className="led" />
-            LOCAL · ENCRYPTED
+            {saveState === "offline"
+              ? "SERVER UNREACHABLE · RETRYING"
+              : saveState === "saving"
+                ? "SAVING…"
+                : "SAVED"}
           </span>
           <button
             type="button"
@@ -2220,19 +2267,21 @@ export function App(props) {
               ?
             </b>
           </button>
-          <V.Button
-            variant="secondary"
-            size="sm"
-            icon="sparkles"
-            className="st-ai"
-            aria-label="Ask Claude"
-            title="Ask Claude"
-            onClick={function () {
-              setAssistant({});
-            }}
-          >
-            <span className="btn-t">Ask</span>
-          </V.Button>
+          {askOk ? (
+            <V.Button
+              variant="secondary"
+              size="sm"
+              icon="sparkles"
+              className="st-ai"
+              aria-label="Ask Claude"
+              title="Ask Claude"
+              onClick={function () {
+                setAssistant({});
+              }}
+            >
+              <span className="btn-t">Ask</span>
+            </V.Button>
+          ) : null}
           <V.Button
             variant="secondary"
             size="sm"
@@ -2259,7 +2308,58 @@ export function App(props) {
             Upload scan
           </V.Button>
         </header>
-        <main className="main" id="main">
+        <main className="main" id="main" tabIndex={-1}>
+          {refusals.length ? (
+            <V.Banner
+              tone="danger"
+              title="That change wasn't saved"
+              action={
+                <V.Button
+                  size="sm"
+                  variant="primary"
+                  onClick={function () {
+                    location.reload();
+                  }}
+                >
+                  Reload
+                </V.Button>
+              }
+            >
+              {refusals
+                .map(function (r) {
+                  return r.message;
+                })
+                .join(" ") +
+                " Reload to see what's saved; nothing else in " +
+                refusals
+                  .map(function (r) {
+                    return r.store;
+                  })
+                  .join(", ") +
+                " is saved until you do."}
+            </V.Banner>
+          ) : null}
+          {conflicts.length ? (
+            <V.Banner
+              tone="danger"
+              title="Someone else changed this workspace"
+              action={
+                <V.Button
+                  size="sm"
+                  variant="primary"
+                  onClick={function () {
+                    location.reload();
+                  }}
+                >
+                  Reload
+                </V.Button>
+              }
+            >
+              {"Their changes to " +
+                conflicts.join(", ") +
+                " were saved first, so yours there weren't. Reload to see the latest, then redo your change."}
+            </V.Banner>
+          ) : null}
           {route === "dashboard" && batches.length ? (
             <button type="button" className="skip-link" onClick={showFindings}>
               Skip to findings
@@ -2389,6 +2489,7 @@ export function App(props) {
       ) : null}
       {uploadOpen ? (
         <Upload
+          initialFiles={Array.isArray(uploadOpen) ? uploadOpen : null}
           latestLabel={batches.length ? batches[batches.length - 1].label : ""}
           hasBatches={batches.length > 0}
           library={library}
@@ -2586,7 +2687,22 @@ export function App(props) {
           }}
         />
       ) : null}
-      <div className="toasts" aria-live="polite">
+      {/* each toast is its own status/alert region; the container isn't, so nothing is announced twice */}
+      <div
+        className="toasts"
+        onMouseEnter={function () {
+          toastPaused.current = true;
+        }}
+        onMouseLeave={function () {
+          toastPaused.current = false;
+        }}
+        onFocus={function () {
+          toastPaused.current = true;
+        }}
+        onBlur={function () {
+          toastPaused.current = false;
+        }}
+      >
         {toasts.map(function (t) {
           return (
             <V.Toast

@@ -1,54 +1,50 @@
 import { Field } from "@/app/auth/Field";
 import { PwMeter } from "@/app/auth/PwMeter";
 import { fmtTime } from "@/app/lib/common";
-import { RotateKey } from "@/app/users/RotateKey";
 import { genPassword } from "@/app/users/utils";
 import { AUTH, ROLE_HELP, ROLE_NAMES, passwordIssues } from "@/lib/auth";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import * as V from "@/ui";
 
 /* ================= Users (administrators) ================= */
 export function UsersModal(p) {
   var ctx = p.ctx,
-    rv = useState(0),
-    st = AUTH.store() || {
-      users: [],
-    },
+    ul = useState(null),
+    users = ul[0] || [],
     ad = useState(null),
-    rp = useState(null),
+    temp = useState(null),
     err = useState(""),
     busy = useState(false),
-    rot = useState(false),
+    idle = useState(AUTH.idleMinutes),
     cu = useState(null);
+  /* the list always comes from the server; every change re-reads it (changes are audited server-side) */
   function refresh() {
-    rv[1](rv[0] + 1);
-  }
-  function act(fn, msg, logA, logD) {
-    err[1]("");
-    try {
-      var r = fn();
-      Promise.resolve(r).then(
-        function () {
-          refresh();
-          if (msg)
-            ctx.toast({
-              title: msg,
-            });
-          if (logA) ctx.log(logA, logD);
-        },
-        function (e) {
-          err[1](e.message);
-        },
-      );
-    } catch (e) {
+    return AUTH.users().then(ul[1], function (e) {
       err[1](e.message);
-    }
+    });
+  }
+  useEffect(function () {
+    refresh();
+  }, []);
+  function act(fn, msg) {
+    err[1]("");
+    return fn().then(
+      function (r) {
+        refresh();
+        AUTH.loadDirectory();
+        if (msg) ctx.toast({ title: msg });
+        return r;
+      },
+      function (e) {
+        err[1](e.message);
+      },
+    );
   }
   var form = ad[0];
   return (
     <V.Modal
       title="Users"
-      subtitle="Accounts for this browser. Each sign-in unlocks the same encrypted workspace; the role decides what the person can change."
+      subtitle="Accounts on this server. The role decides what each person can change; the server enforces it on every request."
       width="860px"
       onClose={p.onClose}
       footer={
@@ -78,7 +74,7 @@ export function UsersModal(p) {
                       busy[1](false);
                       ad[1](null);
                       refresh();
-                      ctx.log("USER-ADD", u.username + " created as " + u.role);
+                      AUTH.loadDirectory();
                       ctx.toast({
                         title: "Account created",
                         message:
@@ -101,14 +97,14 @@ export function UsersModal(p) {
                 <span className="vl-label">Auto sign-out after</span>
                 <select
                   className="wb-select"
-                  value={String(st.idleMinutes || 15)}
+                  value={String(idle[0])}
                   onChange={function (e) {
-                    AUTH.setIdle(+e.target.value);
-                    refresh();
-                    ctx.log(
-                      "POLICY",
-                      "Idle sign-out set to " + e.target.value + " min",
-                    );
+                    var m = +e.target.value;
+                    act(function () {
+                      return AUTH.setIdle(m);
+                    }, "Auto sign-out set to " + m + " min").then(function () {
+                      idle[1](AUTH.idleMinutes);
+                    });
                   }}
                 >
                   {[5, 15, 30, 60, 240].map(function (m) {
@@ -144,17 +140,17 @@ export function UsersModal(p) {
           {err[0]}
         </V.Banner>
       ) : null}
-      {rot[0] && !form ? (
-        <V.Banner tone="warn" title="Rotate the data key now?">
-          The removed account's wrapped key may exist in an old backup or a
-          copied browser profile. Rotating makes it useless.
-          <RotateKey
-            ctx={ctx}
-            onDone={function () {
-              rot[1](false);
-              refresh();
-            }}
-          />
+      {temp[0] ? (
+        <V.Banner
+          tone="warn"
+          title={"Temporary password for " + temp[0].username}
+          onClose={function () {
+            temp[1](null);
+          }}
+        >
+          <code className="vl-mono">{temp[0].password}</code> — give it to the
+          person directly. It's shown only once; they choose their own at sign-in,
+          and their open sessions were ended.
         </V.Banner>
       ) : null}
       {form ? (
@@ -260,9 +256,14 @@ export function UsersModal(p) {
               </tr>
             </thead>
             <tbody>
-              {st.users.map(function (u) {
+              {ul[0] === null ? (
+                <tr>
+                  <td colSpan={5}>Loading…</td>
+                </tr>
+              ) : null}
+              {users.map(function (u) {
                 var self = ctx.me && ctx.me.id === u.id,
-                  locked = u.lockedUntil && u.lockedUntil > Date.now();
+                  locked = u.locked;
                 return (
                   <tr key={u.id}>
                     <td>
@@ -280,16 +281,11 @@ export function UsersModal(p) {
                         aria-label={"Role for " + u.username}
                         onChange={function (e) {
                           var r2 = e.target.value;
-                          act(
-                            function () {
-                              return AUTH.update(u.id, {
-                                role: r2,
-                              });
-                            },
-                            "Role changed",
-                            "USER-ROLE",
-                            u.username + " → " + r2,
-                          );
+                          act(function () {
+                            return AUTH.updateUser(u.id, {
+                              role: r2,
+                            });
+                          }, "Role changed — " + u.username + " must sign in again");
                         }}
                       >
                         {ROLE_NAMES.map(function (r) {
@@ -305,76 +301,31 @@ export function UsersModal(p) {
                       {u.lastLogin ? fmtTime(u.lastLogin) : "never"}
                     </td>
                     <td>
-                      {u.needsReset ? (
-                        <span className="vl-fg-status-warn">
-                          Key rotated · set a new password
-                        </span>
-                      ) : u.disabled ? (
-                        "Disabled"
-                      ) : locked ? (
-                        "Locked · " + (u.failed || 0) + " failed"
-                      ) : u.mustChange ? (
-                        "Must change password"
-                      ) : u.failed ? (
-                        u.failed + " failed attempt(s)"
-                      ) : (
-                        "Active"
-                      )}
+                      {u.disabled
+                        ? "Disabled"
+                        : locked
+                          ? "Locked after failed sign-ins"
+                          : u.mustChange
+                            ? "Must change password"
+                            : "Active"}
                     </td>
                     <td>
-                      {rp[0] === u.id ? (
-                        <form
-                          className="sv-form"
-                          onSubmit={function (e) {
-                            e.preventDefault();
-                            var pw2 = (e.target as any).elements.np.value;
-                            if (passwordIssues(pw2, u.username).length) {
-                              err[1](
-                                "Temporary password needs " +
-                                  passwordIssues(pw2, u.username).join(", ") +
-                                  ".",
-                              );
-                              return;
-                            }
-                            act(
-                              function () {
-                                return AUTH.setPassword(u.id, pw2, true);
-                              },
-                              "Password reset",
-                              "USER-RESET",
-                              u.username +
-                                " password reset by " +
-                                ctx.me.username,
-                            );
-                            rp[1](null);
-                          }}
-                        >
-                          <input
-                            name="np"
-                            className="wb-select"
-                            defaultValue={genPassword()}
-                            aria-label="New temporary password"
-                          />
-                          <V.Button size="sm" type="submit">
-                            Set
-                          </V.Button>
-                          <button
-                            type="button"
-                            className="up-edit"
-                            onClick={function () {
-                              rp[1](null);
-                            }}
-                          >
-                            Cancel
-                          </button>
-                        </form>
-                      ) : (
                         <span className="row-wrap">
                           <button
                             type="button"
                             className="up-edit"
                             onClick={function () {
-                              rp[1](u.id);
+                              act(function () {
+                                return AUTH.updateUser(u.id, {
+                                  resetPassword: true,
+                                });
+                              }, "Password reset").then(function (r) {
+                                if (r && r.tempPassword)
+                                  temp[1]({
+                                    username: u.username,
+                                    password: r.tempPassword,
+                                  });
+                              });
                             }}
                           >
                             Reset password
@@ -386,17 +337,13 @@ export function UsersModal(p) {
                               onClick={function () {
                                 act(
                                   function () {
-                                    return AUTH.update(u.id, {
+                                    return AUTH.updateUser(u.id, {
                                       disabled: !u.disabled,
-                                      lockedUntil: null,
-                                      failed: 0,
                                     });
                                   },
                                   u.disabled
                                     ? "Account enabled"
-                                    : "Account disabled",
-                                  "USER-" + (u.disabled ? "ENABLE" : "DISABLE"),
-                                  u.username,
+                                    : "Account disabled and signed out",
                                 );
                               }}
                             >
@@ -408,17 +355,11 @@ export function UsersModal(p) {
                               type="button"
                               className="up-edit"
                               onClick={function () {
-                                act(
-                                  function () {
-                                    return AUTH.update(u.id, {
-                                      lockedUntil: null,
-                                      failed: 0,
-                                    });
-                                  },
-                                  "Unlocked",
-                                  "USER-UNLOCK",
-                                  u.username,
-                                );
+                                act(function () {
+                                  return AUTH.updateUser(u.id, {
+                                    unlock: true,
+                                  });
+                                }, "Unlocked");
                               }}
                             >
                               Unlock
@@ -450,22 +391,15 @@ export function UsersModal(p) {
                                   return;
                                 }
                                 cu[1](null);
-                                act(
-                                  function () {
-                                    return AUTH.remove(u.id);
-                                  },
-                                  "Account deleted",
-                                  "USER-DELETE",
-                                  u.username,
-                                );
-                                rot[1](true);
+                                act(function () {
+                                  return AUTH.removeUser(u.id);
+                                }, "Account deleted");
                               }}
                             >
                               <V.Icon name="x" size={14} />
                             </button>
                           )}
                         </span>
-                      )}
                     </td>
                   </tr>
                 );
@@ -477,4 +411,3 @@ export function UsersModal(p) {
     </V.Modal>
   );
 }
-/* new data key; every store re-encrypted; other accounts need a fresh temporary password */

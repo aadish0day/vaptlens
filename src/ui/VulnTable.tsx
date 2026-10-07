@@ -347,10 +347,13 @@ export function VulnTable(props) {
                   ]),
               ),
             );
-            if (!open) return cells;
-            return [
-              cells,
-              <tr key={r.id + "-d"} className="vl-tr-detail">
+            /* one keyed fragment either way: returning a bare row when closed and an array when open made React
+               remount the row on every toggle, which threw keyboard focus off the expand button */
+            if (!open) return <React.Fragment key={r.id}>{cells}</React.Fragment>;
+            return (
+              <React.Fragment key={r.id}>
+                {cells}
+              <tr className="vl-tr-detail">
                 <td colSpan={cols.length + 1 + (selOn ? 1 : 0)}>
                   {props.renderDetail ? (
                     props.renderDetail(r)
@@ -358,8 +361,9 @@ export function VulnTable(props) {
                     <FindingDetail finding={r} />
                   )}
                 </td>
-              </tr>,
-            ];
+              </tr>
+              </React.Fragment>
+            );
           })}
         </tbody>
       </table>

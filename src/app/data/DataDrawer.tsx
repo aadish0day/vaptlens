@@ -1,8 +1,7 @@
 import { RO_REASON, count, fmtTime, nowIso } from "@/app/lib/common";
 import { saveFile } from "@/app/lib/export";
 import { buildEvidencePack } from "@/app/lib/integrations";
-import { RotateKey } from "@/app/users/RotateKey";
-import { AUTH, LOCK_AFTER, LOCK_MINUTES } from "@/lib/auth";
+import { AUTH } from "@/lib/auth";
 import {
   localDay,
   parseEpssCsv,
@@ -10,14 +9,11 @@ import {
   runSelfTests,
 } from "@/lib/engine";
 import {
-  P,
-  VAULT,
   WS,
   exportWorkspace,
   importWorkspace,
   readFileText,
 } from "@/lib/store";
-import { SYNC } from "@/lib/sync";
 import React, { useEffect, useRef, useState } from "react";
 import * as V from "@/ui";
 
@@ -30,11 +26,8 @@ export function DataDrawer(p) {
     fk = useRef(null),
     fe = useRef(null),
     fr = useRef(null);
-  var pw = useState(""),
-    pw2 = useState(""),
-    vb = useState(false),
-    st = useState(null),
-    ib = useState("");
+  var ib = useState(""),
+    st = useState(null);
   function importFeed(kind, file) {
     if (!file) return;
     ib[1]("Reading " + file.name + "…");
@@ -81,7 +74,7 @@ export function DataDrawer(p) {
       });
     });
   }
-  /* restore asks once: it replaces this browser's workspace and accounts */
+  /* restore asks once: it replaces this workspace's data on the server (accounts are untouched) */
   var rf = useState(null);
   function restore(file) {
     if (!file) return;
@@ -108,49 +101,22 @@ export function DataDrawer(p) {
   function doRestore() {
     var x = rf[0];
     rf[1](null);
-    p.log("DATA", "Workspace restored from " + x.name);
-    P.hold(
-      P.idle().then(function () {
+    Promise.resolve()
+      .then(function () {
         return importWorkspace(x.text);
-      }),
-    ).then(
-      function () {
-        (P as any).frozen = true;
-        sessionStorage.clear();
-        location.reload();
-      },
-      function (e) {
-        p.toast({
-          title: "Restore failed",
-          message: e.message,
-          tone: "danger",
-        });
-      },
-    );
-  }
-  function enableVault() {
-    if (pw[0].length < 10 || pw[0] !== pw2[0]) return;
-    vb[1](true);
-    VAULT.enable(pw[0]).then(
-      function () {
-        vb[1](false);
-        pw[1]("");
-        pw2[1]("");
-        p.log("VAULT", "Encryption at rest enabled");
-        p.toast({
-          title: "Workspace encrypted",
-          message: "You'll need the passphrase after a reload.",
-        });
-      },
-      function (e) {
-        vb[1](false);
-        p.toast({
-          title: "Couldn't enable encryption",
-          message: e.message,
-          tone: "danger",
-        });
-      },
-    );
+      })
+      .then(
+        function () {
+          location.reload();
+        },
+        function (e) {
+          p.toast({
+            title: "Restore failed",
+            message: e.message,
+            tone: "danger",
+          });
+        },
+      );
   }
   var tabs = [
     "Scans",
@@ -158,79 +124,54 @@ export function DataDrawer(p) {
     "Threat intel",
     "Security",
     "Backup",
-    "Team sync",
     "Self-test",
   ];
-  var tk = useState(SYNC.token()),
-    sy = useState(""),
-    pc = useState(false);
-  function syncFail(e) {
-    sy[1]("");
-    p.toast({
-      title: "Sync failed",
-      message: e.message,
-      tone: "danger",
-    });
-  }
-  function push() {
-    SYNC.setToken(tk[0]);
-    sy[1]("Pushing…");
-    SYNC.push().then(function (r) {
-      sy[1]("");
-      p.log(
-        "SYNC",
-        "Pushed workspace " +
-          WS.current() +
-          " to the team server (version " +
-          r.version +
-          ")",
-      );
-      p.toast({
-        title: "Pushed to the team server",
-        message: "Version " + r.version,
-      });
-    }, syncFail);
-  }
-  function pull() {
-    pc[1](false);
-    SYNC.setToken(tk[0]);
-    sy[1]("Pulling…");
-    SYNC.pull().then(function () {
-      location.reload();
-    }, syncFail);
-  }
   var wl = useState(null),
     wn = useState(""),
     wsBusy = useState(false);
   useEffect(
     function () {
-      if (tb[0] === "Workspaces") WS.list().then(wl[1]);
+      if (tb[0] === "Workspaces") refreshWs();
     },
     [tb[0]],
   );
+  function refreshWs() {
+    return WS.list().then(wl[1], function (e) {
+      p.toast({ title: "Couldn't list workspaces", message: e.message, tone: "danger" });
+    });
+  }
   function switchWs(name) {
     wsBusy[1](true);
     p.log("WORKSPACE", "Switched from " + WS.current() + " to " + name);
-    setTimeout(function () {
-      P.hold(
-        P.idle().then(function () {
-          return WS.switchTo(name);
-        }),
-      ).then(
-        function () {
-          (P as any).frozen = true;
-          location.reload();
-        },
-        function (e) {
-          wsBusy[1](false);
-          p.toast({
-            title: "Couldn't switch workspace",
-            message: e.message,
-            tone: "danger",
-          });
-        },
-      );
-    }, 300);
+    WS.switchTo(name).then(
+      function () {
+        location.reload();
+      },
+      function (e) {
+        wsBusy[1](false);
+        p.toast({
+          title: "Couldn't switch workspace",
+          message: e.message,
+          tone: "danger",
+        });
+      },
+    );
+  }
+  function createWs(name) {
+    wsBusy[1](true);
+    WS.create(name).then(
+      function () {
+        switchWs(name);
+      },
+      function (e) {
+        wsBusy[1](false);
+        p.toast({
+          title: "Couldn't create workspace",
+          message: e.message,
+          tone: "danger",
+        });
+      },
+    );
   }
   var sec = tb[0];
   return (
@@ -295,10 +236,10 @@ export function DataDrawer(p) {
         />
         {sec === "Scans" ? (
           <div className="stack">
-            <V.Banner tone="privacy" title="Encrypted in this browser">
-              Scans stay in this browser's storage, encrypted with your sign-in,
-              so they survive a reload. Nothing leaves this browser unless you
-              push it, still encrypted, from Team sync.
+            <V.Banner tone="privacy" title="Parsed here, kept on your server">
+              Scan files are parsed in this browser; the findings are saved to
+              this VAPTLens server, so they're there from any browser you sign
+              in with. Nothing is sent to anyone else.
             </V.Banner>
             {p.batches.length ? (
               <div className="up-list">
@@ -473,8 +414,8 @@ export function DataDrawer(p) {
             <p className="up-help">
               Keep each client or engagement in its own workspace: scans,
               governance, notes, evidence, library and report settings switch
-              together. Threat-intel feeds are shared. Everything stays in this
-              browser.
+              together. Threat-intel feeds are shared. Everyone signed in to
+              this server sees the same workspaces.
             </p>
             <div className="up-list">
               {[
@@ -501,7 +442,9 @@ export function DataDrawer(p) {
                               " scans · " +
                               p.active.length +
                               " active findings"
-                            : "Saved " + fmtTime((w as any).savedAt)}
+                            : "Created " +
+                              fmtTime((w as any).createdAt) +
+                              ((w as any).createdBy ? " by " + (w as any).createdBy : "")}
                         </span>
                       </div>
                       <span />
@@ -529,7 +472,7 @@ export function DataDrawer(p) {
                                 p.toast({
                                   title: "Click × again to delete " + w.name,
                                   message:
-                                    "Its saved snapshot is removed for good.",
+                                    "Its scans, decisions and evidence are removed for good (its audit history is kept).",
                                   tone: "info",
                                 });
                                 setTimeout(function () {
@@ -539,11 +482,13 @@ export function DataDrawer(p) {
                               }
                               cfWs[1](null);
                               p.log("WORKSPACE", "Deleted workspace " + w.name);
-                              WS.remove(w.name)
-                                .then(function () {
-                                  return WS.list();
-                                })
-                                .then(wl[1]);
+                              WS.remove(w.name).then(refreshWs, function (e) {
+                                p.toast({
+                                  title: "Couldn't delete " + w.name,
+                                  message: e.message,
+                                  tone: "danger",
+                                });
+                              });
                             }}
                           >
                             <V.Icon name="x" size={14} />
@@ -560,7 +505,7 @@ export function DataDrawer(p) {
                 e.preventDefault();
                 var n = wn[0].trim();
                 if (!n || n === WS.current()) return;
-                switchWs(n);
+                createWs(n);
               }}
             >
               <input
@@ -589,8 +534,8 @@ export function DataDrawer(p) {
           <div className="stack">
             <p className="up-help">
               Download the feeds yourself and drop them here. They're parsed in
-              this browser and kept in storage, so the zero-trust promise
-              holds. Every finding is re-scored when a feed loads.
+              this browser and cached here; VAPTLens never fetches anything
+              from the internet. Every finding is re-scored when a feed loads.
             </p>
             <div className="intel">
               <div className="intel-row">
@@ -768,32 +713,28 @@ export function DataDrawer(p) {
           <div className="stack">
             <V.Banner
               tone="privacy"
-              title={"Encrypted at rest · signed in as " + p.me.username}
+              title={"Signed in as " + p.me.username + " · " + p.role}
             >
-              Scans, governance, notes, the audit log, the library, engagement
-              details, evidence and saved workspaces are stored with AES-GCM
-              256. The data key is wrapped separately for each account with a
-              key derived from its password (PBKDF2-SHA-256, 310,000 rounds). It
-              lives in memory; this tab keeps a copy wrapped by a
-              non-extractable browser key so a reload doesn't sign you out. Both
-              are dropped on sign-out, tab close or after the idle timeout.
+              Accounts, sessions and every change live on this VAPTLens server.
+              Your role is checked by the server on every request, so what the
+              screen hides is also refused if someone calls the API directly.
+              The audit log is written by the server, stamped with who did
+              what, and hash-chained so edits to the database show up when you
+              verify it.
             </V.Banner>
             <dl className="kv">
-              <dt>Accounts</dt>
-              <dd>{((AUTH.store() || {}).users || []).length}</dd>
               <dt>Idle sign-out</dt>
-              <dd>{((AUTH.store() || {}).idleMinutes || 15) + " min"}</dd>
+              <dd>{AUTH.idleMinutes + " min"}</dd>
               <dt>Lockout</dt>
-              <dd>
-                {LOCK_AFTER + " failed attempts → " + LOCK_MINUTES + " min"}
-              </dd>
+              <dd>5 failed attempts → 5 min</dd>
+              <dt>Passwords</dt>
+              <dd>scrypt-hashed on the server; 12+ characters</dd>
             </dl>
             <p className="up-help">
               {
-                "Honest limits: this protects data at rest and separates roles for people sharing one browser profile. Someone with the device can still copy the encrypted data and guess passwords offline, which is why long passwords matter. The governance audit log is hash-chained (SHA-256) and records who did what; verify it from SLA & RACI."
+                "Protect the server itself: serve it over HTTPS, keep its database volume on an encrypted disk, and back it up. Whoever administers the server can read the data, as with any self-hosted web app."
               }
             </p>
-            {p.isAdmin ? <RotateKey ctx={p} /> : null}
             {p.isAdmin ? (
               <V.Button
                 size="sm"
@@ -811,10 +752,10 @@ export function DataDrawer(p) {
         {sec === "Backup" ? (
           <div className="stack">
             <p className="up-help">
-              One JSON file with every scan, governance decision, note, evidence
-              image, library entry, setting and the user accounts. It stays
-              encrypted: restoring it anywhere needs one of its accounts to sign
-              in.
+              One JSON file with every scan, governance decision, note, library
+              entry, setting and every evidence image in this workspace. It
+              isn't encrypted and has no accounts in it: store it somewhere
+              safe.
             </p>
             <div className="row-wrap">
               <V.Button
@@ -822,7 +763,7 @@ export function DataDrawer(p) {
                 variant="primary"
                 icon="download"
                 restricted={!p.isAdmin}
-                restrictedReason="Only administrators can export: the file contains every account's wrapped key."
+                restrictedReason="Only administrators can export a full backup."
                 onClick={backup}
               >
                 Export workspace
@@ -904,89 +845,13 @@ export function DataDrawer(p) {
               >
                 {"Backup from " +
                   (rf[0].at ? fmtTime(rf[0].at) : "an unknown date") +
-                  ". Everything in this browser — scans, decisions, accounts — is replaced, then you sign in with an account from the backup."}
+                  ". This workspace's scans, decisions and evidence on the server are replaced for everyone. Accounts aren't affected."}
               </V.Banner>
             ) : null}
-            <V.Banner
-              tone="warn"
-              title="Restore replaces this browser's workspace and accounts"
-            >
-              The page reloads and asks you to sign in with an account from the
-              backup. Export first if you want to keep what's here.
+            <V.Banner tone="warn" title={"Restore replaces workspace " + WS.current()}>
+              Export first if you want to keep what's here. The restore is
+              recorded in the audit log.
             </V.Banner>
-          </div>
-        ) : null}
-        {sec === "Team sync" ? (
-          <div className="stack">
-            <p className="up-help">
-              {'Share workspace "' +
-                WS.current() +
-                "\" with your team through the sync server. It receives the same encrypted snapshot as a backup: findings stay ciphertext, and each teammate signs in with their own account. Push sends your copy; pull replaces this browser's copy with the server's."}
-            </p>
-            <label className="wb-field">
-              <span className="vl-label">Team token</span>
-              <input
-                className="wb-select"
-                type="password"
-                autoComplete="off"
-                value={tk[0]}
-                onChange={function (e) {
-                  tk[1](e.target.value);
-                }}
-              />
-            </label>
-            <p className="up-help">
-              {SYNC.version()
-                ? "Last synced at server version " + SYNC.version() + "."
-                : "Not synced from this browser yet."}
-            </p>
-            <div className="row-wrap">
-              <V.Button
-                size="sm"
-                variant="primary"
-                icon="upload"
-                disabled={!tk[0].trim() || !!sy[0]}
-                restricted={p.readOnly}
-                restrictedReason={RO_REASON}
-                onClick={push}
-              >
-                {sy[0] === "Pushing…" ? sy[0] : "Push to team"}
-              </V.Button>
-              <V.Button
-                size="sm"
-                icon="download"
-                disabled={!tk[0].trim() || !!sy[0]}
-                onClick={function () {
-                  pc[1](true);
-                }}
-              >
-                {sy[0] === "Pulling…" ? sy[0] : "Pull from team…"}
-              </V.Button>
-            </div>
-            {pc[0] ? (
-              <V.Banner
-                tone="danger"
-                title="Replace this browser's copy?"
-                action={
-                  <span className="row-wrap">
-                    <V.Button size="sm" variant="danger" onClick={pull}>
-                      Pull and reload
-                    </V.Button>
-                    <V.Button
-                      size="sm"
-                      onClick={function () {
-                        pc[1](false);
-                      }}
-                    >
-                      Cancel
-                    </V.Button>
-                  </span>
-                }
-              >
-                Scans, decisions and accounts here are replaced by the server's
-                version. Anything you haven't pushed is lost.
-              </V.Banner>
-            ) : null}
           </div>
         ) : null}
         {sec === "Self-test" ? (

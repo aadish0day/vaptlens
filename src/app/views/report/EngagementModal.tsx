@@ -34,7 +34,8 @@ export function EngagementModal(p) {
   return (
     <V.Modal
       title="Engagement details"
-      subtitle="Printed on the report cover and in every export. Stored in this browser (encrypted when the vault is on)."
+      onCloseGuard={JSON.stringify(e) !== JSON.stringify(e0) ? "Discard your changes to the engagement details?" : null}
+      subtitle="Printed on the report cover and in every export. Saved with this workspace on your VAPTLens server."
       width="760px"
       onClose={p.onClose}
       footer={[
@@ -46,38 +47,17 @@ export function EngagementModal(p) {
           variant="primary"
           disabled={ctx.readOnly}
           onClick={function () {
-            var prev = (ctx.engagement || {}).status;
-            if (
-              e.status === "Approved" &&
-              prev !== "Approved" &&
-              !ctx.isAdmin
-            ) {
-              ctx.toast({
-                title: "Only an administrator can approve the report",
-                message: "Saved as In review.",
-                tone: "info",
-              });
-              e.status = "In review";
-            }
-            if (
-              prev === "Approved" &&
-              e.status === "Approved" &&
-              !ctx.isAdmin &&
-              JSON.stringify(
-                Object.assign({}, e, {
-                  status: 0,
-                  approvedAt: 0,
-                  approvedBy: 0,
-                }),
-              ) !==
-                JSON.stringify(
-                  Object.assign({}, ctx.engagement || {}, {
-                    status: 0,
-                    approvedAt: 0,
-                    approvedBy: 0,
-                  }),
-                )
-            ) {
+            /* mirrors checkEngagement in server/server.mjs: only an administrator approves, never the person
+               who edited it (separation of duties), and any edit after approval sends it back to review */
+            var prevE = ctx.engagement || {},
+              prev = prevE.status,
+              meta = { status: 0, approvedAt: 0, approvedBy: 0, editedBy: 0 },
+              changed =
+                JSON.stringify(Object.assign({}, e, meta)) !==
+                JSON.stringify(Object.assign({}, prevE, meta)),
+              sod = (ctx.policy || {}).sod !== false;
+            if (changed) e.editedBy = ctx.me.username;
+            if (prev === "Approved" && e.status === "Approved" && changed) {
               e.status = "In review";
               e.approvedBy = "";
               ctx.toast({
@@ -86,6 +66,17 @@ export function EngagementModal(p) {
                   "It changed after approval, so an administrator has to approve it again.",
                 tone: "info",
               });
+            }
+            if (e.status === "Approved" && prev !== "Approved") {
+              var why = !ctx.isAdmin
+                ? "Only an administrator can approve the report."
+                : sod && (changed || prevE.editedBy === ctx.me.username)
+                  ? "You edited it, so another administrator has to approve it (separation of duties)."
+                  : "";
+              if (why) {
+                ctx.toast({ title: why, message: "Saved as In review.", tone: "info" });
+                e.status = "In review";
+              }
             }
             if (e.status === "Approved" && prev !== "Approved") {
               e.approvedAt = nowIso();

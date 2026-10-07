@@ -11,7 +11,7 @@ import {
 import { TopFixes } from "@/app/views/attack/TopFixes";
 import { Campaigns } from "@/app/views/remediation/Campaigns";
 import { topFixes } from "@/lib/engine";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import * as V from "@/ui";
 
 /* ================= 5. Remediation ================= */
@@ -89,8 +89,23 @@ export function Remediation(ctx) {
     );
     ctx.log("PATCH", x.name + " moved " + from + " → " + to);
   }
+  /* keyboard moves keep focus on the card in its new column (it re-renders there) */
+  var refocus = useRef(null);
+  useEffect(function () {
+    var r = refocus.current;
+    if (!r) return;
+    refocus.current = null;
+    var sel = function (s2) {
+      return document.querySelector('[data-kmove="' + CSS.escape(r.key + ":" + s2) + '"]') as HTMLButtonElement;
+    };
+    var b = sel(r.dir > 0 ? "forward" : "back");
+    if (!b || b.disabled) b = sel(r.dir > 0 ? "back" : "forward");
+    if (!b || b.disabled) b = sel("open");
+    if (b) b.focus();
+  });
   function move(x, dir) {
     var cur = ctx.g(x).status || "To Do";
+    refocus.current = { key: x.key, dir: dir };
     moveTo(x, COLS[Math.max(0, Math.min(3, COLS.indexOf(cur) + dir))]);
   }
   function dropOn(c) {
@@ -264,6 +279,13 @@ export function Remediation(ctx) {
                                     ov[1](null);
                                   },
                                 }
+                          }
+                          moveId={x.key}
+                          backLabel={
+                            ci > 0 ? "Move " + x.name + " to " + COLS[ci - 1] : "Move back"
+                          }
+                          forwardLabel={
+                            ci < 3 ? "Move " + x.name + " to " + COLS[ci + 1] : "Move forward"
                           }
                           onBack={
                             !ctx.readOnly && ci > 0

@@ -10,7 +10,7 @@ import {
   complianceOf,
   threatIndex,
 } from "@/lib/engine";
-import { IDB, P, WS, verifyAudit } from "@/lib/store";
+import { AUDIT, P, WS } from "@/lib/store";
 import Papa from "papaparse";
 
 /* CMDB / asset inventory CSV: host, owner, business unit, tier, exposure, well-being, tags, device, os, retired */
@@ -216,6 +216,7 @@ export function syncJiraCsv(text, ctx) {
   });
   var iKey = H.indexOf("issue key"),
     iStatus = H.indexOf("status"),
+    iCat = H.indexOf("status category"),
     iLabels = [],
     iSum = H.indexOf("summary");
   H.forEach(function (x, i) {
@@ -253,15 +254,23 @@ export function syncJiraCsv(text, ctx) {
       return;
     }
     matched++;
-    var st = String(row0[iStatus] || "").toLowerCase(),
+    var st = String(row0[iStatus] || "").trim().toLowerCase(),
+      cat = iCat >= 0 ? String(row0[iCat] || "").trim().toLowerCase() : "",
+      g0 = ctx.gov[k] || {},
       p: any = {
         ticket: String(row0[iKey]).trim(),
         assigned: true,
       };
-    if (/done|closed|resolved|fixed|complete/.test(st)) {
+    /* Jira's Status Category is authoritative when exported; otherwise the status must BE a done word
+       ("Unresolved", "Not Done", "Incomplete", "Won't Fix" are not fixes) */
+    var isDone = cat
+      ? cat === "done" && !/won'?t|not|declin|duplicate|cancel/.test(st)
+      : /^(done|closed|resolved|fixed|complete|completed|remediated)$/.test(st);
+    if (isDone) {
       p.status = "Remediated";
       p.fixed = true;
-      p.fixedAt = nowIso();
+      /* keep the original fix date: re-syncing must not move it (regressions are measured from it) */
+      p.fixedAt = g0.fixed && g0.fixedAt ? g0.fixedAt : nowIso();
       done++;
     } else if (/review|\bqa\b|verif|testing/.test(st)) p.status = "In Review";
     else if (/\bin (progress|development)\b|doing|\bwip\b/.test(st))
@@ -291,7 +300,7 @@ export function buildEvidencePack(ctx) {
   return import("jszip")
     .then(function (m) {
       JSZipLib = m.default;
-      return verifyAudit(ctx.audit, ctx.auditHead);
+      return AUDIT.verify();
     })
     .then(function (chain) {
       var Z = new JSZipLib(),
@@ -575,11 +584,12 @@ export function buildEvidencePack(ctx) {
         ]),
       );
       Z.file("digest.md", digestMd(ctx));
-      return IDB.all()
-        .then(function (all) {
-          var jobs = Object.keys(all)
-            .filter(function (k) {
-              return k.indexOf("ev:") === 0;
+      /* every evidence set in the workspace, read from the server (not only the ones opened this session) */
+      return P.evidenceKeys()
+        .then(function (keys) {
+          var jobs = keys
+            .map(function (ek) {
+              return "ev:" + ek;
             })
             .map(function (k) {
               return P.evidence(k.slice(3)).then(function (list) {

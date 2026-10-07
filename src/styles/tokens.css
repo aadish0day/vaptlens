@@ -1735,6 +1735,100 @@
     "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
   --font-display:
     "IBM Plex Sans Condensed", "IBM Plex Sans", "Arial Narrow", sans-serif;
+
+  /* ---- type scale (design/tokens.json → type.scale). Console default is --text-base (13px). ---- */
+  --text-2xs: 10px;
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-base: 13px;
+  --text-md: 14px;
+  --text-lg: 16px;
+  --text-xl: 18px;
+  --text-2xl: 20px;
+  --text-3xl: 22px;
+  --text-4xl: 24px;
+  --text-5xl: 28px;
+  --text-6xl: 32px;
+  --text-7xl: 36px;
+  --text-8xl: 40px;
+  --text-9xl: 44px;
+  --text-label: 10.5px; /* uppercase mono eyebrows only */
+  --text-code: 12.5px; /* code blocks and snippets */
+  --text-watermark: 96px; /* report DRAFT stamp */
+  --leading-none: 1;
+  --leading-xs: 14px;
+  --leading-sm: 16px;
+  --leading-md: 18px;
+  --leading-base: 20px;
+  --leading-lg: 22px;
+  --leading-xl: 24px;
+  --leading-2xl: 32px;
+  --leading-3xl: 40px;
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+  --tracking-tight: -0.01em;
+  --tracking-normal: 0;
+  --tracking-caps: 0.08em;
+  --tracking-label: 0.1em;
+  /* semantic type styles: use as `font: var(--type-body-sm);` (letter-spacing set separately) */
+  --type-kpi: var(--weight-semibold) var(--text-7xl) / var(--leading-3xl) var(--font-display);
+  --type-title-lg: var(--weight-semibold) var(--text-5xl) / var(--leading-2xl) var(--font-display);
+  --type-title: var(--weight-semibold) var(--text-xl) / var(--leading-xl) var(--font-display);
+  --type-body: var(--weight-regular) var(--text-md) / var(--leading-lg) var(--font-sans);
+  --type-body-sm: var(--weight-regular) var(--text-base) / var(--leading-base) var(--font-sans);
+  --type-body-strong: var(--weight-medium) var(--text-base) / var(--leading-base) var(--font-sans);
+  --type-caption: var(--weight-medium) var(--text-sm) / var(--leading-sm) var(--font-sans);
+  --type-card-title: var(--weight-semibold) var(--text-xs) / var(--leading-sm) var(--font-mono);
+  --type-label: var(--weight-medium) var(--text-label) / var(--leading-xs) var(--font-mono);
+  --type-mono: var(--weight-regular) var(--text-base) / var(--leading-base) var(--font-mono);
+  --type-mono-sm: var(--weight-medium) var(--text-sm) / var(--leading-sm) var(--font-mono);
+  --type-code: var(--weight-regular) var(--text-code) / var(--leading-base) var(--font-mono);
+
+  /* ---- motion additions (aligned with Carbon's duration ladder) ---- */
+  --duration-slower: 400ms; /* large expansion, important notifications */
+  --duration-dim: 700ms; /* background dimming, long fades */
+  --duration-loop-fast: 800ms; /* spinner rotation */
+  --duration-loop: 1400ms; /* pulse, skeleton shimmer, indeterminate bars */
+  --duration-loop-slow: 2400ms; /* status LED breathing */
+  --ease-exit: cubic-bezier(0.2, 0, 1, 0.9); /* elements leaving (Carbon productive exit) */
+
+  /* ---- spacing roles: every layout and component inset resolves to one of these.
+     Density ([data-density]) and breakpoints change the role, never the component rule. ---- */
+  --page-pad-top: var(--space-6); /* view top padding under the status strip */
+  --page-pad-x: var(--space-8); /* view side padding */
+  --page-pad-bottom: var(--space-12); /* room under the last section */
+  --page-gap: var(--space-6); /* between the status strip area and the view */
+  --gap-section: var(--space-4); /* between page sections (head, grids, cards) */
+  --gap-grid: var(--space-4); /* between cards in a grid; also the dashboard grid margin */
+  --gap-stack: var(--space-4); /* between stacked blocks inside a section */
+  --gap-inline: var(--space-2); /* between inline controls: buttons, chips, filters */
+  --gap-tight: var(--space-1); /* icon to label, tag to tag */
+  --inset-card: var(--space-5); /* card body and card title share it, so content aligns under the title */
+  --inset-card-end: var(--space-3); /* card header end, where action buttons sit */
+  --inset-overlay: var(--space-5); /* modal and drawer head, body and footer */
+  --inset-cell: var(--space-4); /* table cell sides; bleed tables align the outer cells to --inset-card */
+
+  /* ---- sizes for recurring inline UI ---- */
+  --chip-height: 22px; /* tags, badges with text, inline meters */
+  --count-height: 16px; /* numeric count bubbles */
+
+  /* ---- composed rings and highlights ---- */
+  --ring-offset: 0 0 0 2px var(--surface-100); /* gap between a control and its focus ring */
+  --shadow-focus-soft: 0 0 0 3px color-mix(in srgb, var(--signal) 25%, transparent);
+  --highlight-inset: inset 0 1px 0 rgba(255, 255, 255, 0.22); /* top sheen on filled buttons */
+  --highlight-inset-soft: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+
+  --on-avatar: #ffffff; /* initials on generated avatar hues (lightness 32% keeps ≥ 4.5:1) */
+
+  /* ---- report paper (always printed on white, independent of the app theme) ---- */
+  --paper-bg: #ffffff;
+  --paper-ink: #0f1a24;
+  --paper-muted: #4a5a6a;
+  --paper-border: #d3dbe3;
+  --paper-watermark: rgba(160, 20, 40, 0.07);
+
 }
 .paper {
   color-scheme: light;
@@ -1817,4 +1911,23 @@
   --ring-inset: inset 0 0 0 1px var(--border);
   --ring-signal: 0 0 0 1px var(--signal);
   --on-danger: #ffffff;
+}
+
+/* spacing roles by breakpoint (media queries can't read tokens, so the scale values are written out) */
+@media (max-width: 1023px) {
+  :root {
+    --page-pad-top: var(--space-4);
+    --page-pad-x: var(--space-4);
+    --page-gap: var(--space-4);
+  }
+}
+@media (max-width: 479px) {
+  :root {
+    --page-gap: var(--space-3);
+  }
+}
+@media (min-width: 1600px) {
+  :root {
+    --page-pad-x: var(--space-10);
+  }
 }

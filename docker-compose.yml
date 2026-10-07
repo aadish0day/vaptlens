@@ -3,15 +3,15 @@ services:
   web:
     build: { context: ., target: runtime }
     image: vaptlens:latest
-    # loopback only by default. With no SYNC_TOKEN, /api/ is unauthenticated, so set a token
-    # before exposing this to a network: BIND_ADDR=0.0.0.0 in .env
+    # loopback only by default. To let others on your network sign in, set in .env:
+    #   BIND_ADDR=0.0.0.0  and  ALLOWED_HOSTS=<the hostname or IP they type>  (and put HTTPS in front)
     ports: ["${BIND_ADDR:-127.0.0.1}:8080:8080"]
     restart: unless-stopped
     read_only: true
     tmpfs: ["/var/cache/nginx", "/var/run", "/tmp"]
     security_opt: ["no-new-privileges:true"]
 
-  # PostgreSQL database for persistence. Not published: only the sync service reaches it.
+  # PostgreSQL: all accounts and data. Not published: only the API server reaches it.
   postgres:
     image: postgres:16-alpine
     restart: unless-stopped
@@ -26,9 +26,8 @@ services:
       timeout: 5s
       retries: 5
 
-  # team sync (nginx proxies /api/ here). Not published: reachable only through nginx.
-  # Without SYNC_TOKEN it runs unauthenticated; set one before exposing the app, e.g. in .env:
-  #   echo "SYNC_TOKEN=$(openssl rand -hex 24)" >> .env
+  # API server (nginx proxies /api/ here): sign-in, roles, workspaces, audit. Not published: reachable only through nginx.
+  # First visit to the app creates the administrator.
   sync:
     build: { context: ., target: sync }
     image: vaptlens-sync:latest
@@ -37,11 +36,17 @@ services:
         condition: service_healthy
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-vaptlens}:${POSTGRES_PASSWORD:?}@postgres:5432/${POSTGRES_DB:-vaptlens}
-      SYNC_TOKEN: ${SYNC_TOKEN:-}
       PORT: 8787
       HOST: 0.0.0.0  # inside the compose network only; no host port is published
-    volumes: ["sync-data:/data"]
-    restart: on-failure:3
+      TRUST_PROXY: "1"  # nginx sets X-Real-IP for the sign-in rate limit
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1}
+      COOKIE_SECURE: ${COOKIE_SECURE:-0}  # set 1 once the app is served over HTTPS
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8787/api/health',{headers:{host:'localhost'}}).then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
     read_only: true
     security_opt: ["no-new-privileges:true"]
 
@@ -51,13 +56,13 @@ services:
     build: { context: ., target: dev }
     ports: ["${BIND_ADDR:-127.0.0.1}:5173:5173"]
     volumes:
-      - ./src:/app/src
-      - ./index.html:/app/index.html
-      - ./public:/app/public
+      - ./src:/src/src
+      - ./index.html:/src/index.html
+      - ./app:/src/app
+      - ./public:/src/public
     environment:
       - CHOKIDAR_USEPOLLING=true
       - SYNC_URL=http://sync:8787
 
 volumes:
-  sync-data:
   pg-data:

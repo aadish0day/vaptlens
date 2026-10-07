@@ -26,23 +26,19 @@ export function MyPasswordModal(p) {
           disabled={!ok || busy[0]}
           onClick={function () {
             busy[1](true);
-            AUTH.verify(p.me.id, cur[0]).then(function (good) {
-              if (!good) {
-                busy[1](false);
-                err[1]("The current password is wrong.");
-                return;
-              }
-              return AUTH.setPassword(p.me.id, a[0], false).then(function () {
-                p.ctx.log(
-                  "PASSWORD",
-                  p.me.username + " changed their password",
-                );
+            AUTH.changePassword(cur[0], a[0]).then(
+              function () {
                 p.ctx.toast({
                   title: "Password changed",
+                  message: "Your other signed-in browsers were signed out.",
                 });
                 p.onClose();
-              });
-            });
+              },
+              function (e) {
+                busy[1](false);
+                err[1](e.message);
+              },
+            );
           }}
         >
           Save

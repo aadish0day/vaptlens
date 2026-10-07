@@ -147,6 +147,11 @@ export function Palette(p) {
           placeholder="Jump to a view, host, finding or action…"
           value={q[0]}
           aria-label="Search commands"
+          role="combobox"
+          aria-expanded={list.length > 0}
+          aria-controls="pal-list"
+          aria-autocomplete="list"
+          aria-activedescendant={list[sel[0]] ? "pal-opt-" + sel[0] : undefined}
           onChange={function (e) {
             q[1](e.target.value);
             sel[1](0);
@@ -164,11 +169,12 @@ export function Palette(p) {
             }
           }}
         />
-        <ul className="pal-list" role="listbox">
+        <ul className="pal-list" role="listbox" id="pal-list" aria-label="Commands">
           {list.map(function (it, i) {
             return (
               <li
                 key={it.k}
+                id={"pal-opt-" + i}
                 role="option"
                 aria-selected={i === sel[0]}
                 className={i === sel[0] ? "is-on" : ""}

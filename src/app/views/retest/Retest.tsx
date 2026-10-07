@@ -113,6 +113,33 @@ export function Retest(ctx) {
     ),
   );
   var same = ba.id === bb.id;
+  /* one scan: nothing to compare yet — say what to do instead of showing two identical pickers */
+  if (bs.length < 2)
+    return (
+      <div className="page">
+        <PageHead
+          title="Re-Test Verification"
+          sub="Compare a re-test scan against the original to see what's fixed, still open or new."
+        />
+        <V.EmptyState
+          title="Upload a re-test scan to compare"
+          hint={
+            "There's one scan in this workspace (" +
+            (bs[0] ? lab(bs[0]) : "none") +
+            "). After the fixes, scan the same hosts again and upload it here."
+          }
+          action={
+            ctx.readOnly ? null : (
+              <V.Button variant="primary" size="sm" icon="upload" onClick={function () {
+                ctx.openUpload();
+              }}>
+                Upload re-test scan
+              </V.Button>
+            )
+          }
+        />
+      </div>
+    );
   return (
     <div className="page">
       <PageHead

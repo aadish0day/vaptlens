@@ -804,7 +804,7 @@ export function Dashboard(ctx) {
             sm: 1,
           }}
           rowHeight={36}
-          margin={[16, 16]}
+          margin={[16, 16]} /* = --gap-grid, so dashboard gutters match every other view */
           containerPadding={[0, 0]}
           draggableHandle=".vl-card-head"
           draggableCancel="button, a, input, select"

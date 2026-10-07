@@ -8,12 +8,17 @@ export function Modal(props) {
 }
 
 export function ModalInner(props) {
-  var ref = useDialog(props.onClose);
+  /* onCloseGuard: a question to confirm before closing by backdrop, Esc or ×, when the dialog holds unsaved work */
+  function close() {
+    if (props.onCloseGuard && !window.confirm(props.onCloseGuard)) return;
+    if (props.onClose) props.onClose();
+  }
+  var ref = useDialog(close);
   return (
     <div
       className="vl-overlay vl-overlay-center"
       onClick={function (e) {
-        if (e.target === e.currentTarget && props.onClose) props.onClose();
+        if (e.target === e.currentTarget) close();
       }}
     >
       <div
@@ -42,7 +47,7 @@ export function ModalInner(props) {
             type="button"
             className="vl-icon-btn"
             aria-label="Close"
-            onClick={props.onClose}
+            onClick={close}
           >
             <Icon name="x" size={14} />
           </button>

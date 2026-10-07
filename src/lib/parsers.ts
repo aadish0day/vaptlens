@@ -64,19 +64,17 @@ export function cvesIn(s) {
     : [];
 }
 
+/* host of a URL or bare host; IPv6 comes back without brackets, matching what the network parsers produce */
 export function hostOf(u) {
+  var str = String(u || "").trim();
+  if (/^[0-9a-f:]+(%\w+)?$/i.test(str) && str.indexOf(":") !== str.lastIndexOf(":")) return str.toLowerCase();
+  var br = /^(?:[a-z][a-z0-9+.-]*:\/\/)?\[([0-9a-f:.]+)\]/i.exec(str);
+  if (br) return br[1].toLowerCase();
   try {
-    return new URL(u).hostname;
-  } catch (e) {
-    var str = String(u || "").replace(/^https?:\/\//, "");
-    var firstPart = str.split('/')[0];
-    if (firstPart.indexOf(":") !== firstPart.lastIndexOf(":")) {
-      return /^\[.*\]$/.test(firstPart) ? firstPart : "[" + firstPart + "]";
-    }
-    return (
-      str.split(/[/:]/)[0] || "unknown-host"
-    );
-  }
+    var h = new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(str) ? str : "http://" + str).hostname;
+    if (h) return h.toLowerCase();
+  } catch (e) {}
+  return str.replace(/^[a-z][a-z0-9+.-]*:\/\//i, "").split(/[/:?#]/)[0] || "unknown-host";
 }
 
 export function portOf(u) {
@@ -152,7 +150,16 @@ export function row(o) {
     dateHint: o.dateHint || undefined,
   };
 }
-/* ISO date (yyyy-mm-dd) from many timestamp shapes; null when unusable */
+/* a real calendar date between 1995 and 2100 as yyyy-mm-dd, else null (2026-13-45 and Feb 30 are rejected) */
+function ymd(y, m, d) {
+  var Y = +y,
+    M = +m,
+    D = +d;
+  if (!(Y >= 1995 && Y <= 2100 && M >= 1 && M <= 12 && D >= 1)) return null;
+  var t = new Date(Date.UTC(Y, M - 1, D));
+  if (t.getUTCMonth() !== M - 1 || t.getUTCDate() !== D) return null;
+  return Y + "-" + String(M).padStart(2, "0") + "-" + String(D).padStart(2, "0");
+}
 
 /* ISO date (yyyy-mm-dd) from many timestamp shapes; null when unusable */
 export function isoDay(v) {
@@ -165,17 +172,23 @@ export function isoDay(v) {
       /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::\d{2}(?:\.\d+)?)?)?$/.exec(
         sv,
       );
-  if (m0) return m0[1] + "-" + m0[2] + "-" + m0[3];
+  if (m0) return ymd(m0[1], m0[2], m0[3]);
   var mc = /^(\d{4})(\d{2})(\d{2})(T\d|$)/.exec(sv);
-  if (mc && +mc[1] >= 1995 && +mc[1] <= 2100)
-    return mc[1] + "-" + mc[2] + "-" + mc[3];
+  if (mc) return ymd(mc[1], mc[2], mc[3]);
+  /* day-first vs month-first: dots and dashes are day-first (04.03.2026 = 4 March); slashes are month-first
+     (US scanner exports) unless the numbers rule it out (25/03/2026) */
+  var dm = /^(\d{1,2})([./-])(\d{1,2})\2(\d{4})(?:[T ,]|$)/.exec(sv);
+  if (dm) {
+    var a1 = +dm[1],
+      a2 = +dm[3],
+      dayFirst = dm[2] !== "/" || a1 > 12;
+    if (dm[2] === "/" && a2 > 12) dayFirst = false;
+    return dayFirst ? ymd(dm[4], a2, a1) : ymd(dm[4], a1, a2);
+  }
   var d = new Date(v);
   if (isNaN(d as any)) {
     var m = /(\d{4})(\d{2})(\d{2})T?/.exec(String(v));
-    if (m)
-      return +m[1] >= 1995 && +m[1] <= 2100
-        ? m[1] + "-" + m[2] + "-" + m[3]
-        : null;
+    if (m) return ymd(m[1], m[2], m[3]);
   }
   if (isNaN(d as any) || d.getFullYear() < 1995 || d.getFullYear() > 2100)
     return null;

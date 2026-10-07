@@ -70,7 +70,7 @@ export function FileDropzone(props) {
       ) : null,
       <span key="p" className="vl-drop-privacy">
         <Icon name="shield-check" size={12} />
-        Files never leave this machine
+        Parsed in your browser
       </span>,
     ];
   return (

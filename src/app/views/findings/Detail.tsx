@@ -7,6 +7,7 @@ import {
   fmtTime,
   nowIso,
   uniq,
+  mustRequest,
 } from "@/app/lib/common";
 import { EMPTY_FILTERS } from "@/app/lib/filters";
 import { Sel } from "@/app/views/dashboard/Sel";
@@ -108,10 +109,7 @@ export function Detail(p) {
     /* governance policy: maximum exception length by severity; Critical/KEV acceptances may need a second administrator */
     var pol = ctx.policy || {},
       maxD = (pol.maxDays || {})[f.sev] || 365,
-      needSecond =
-        stt === "accepted" &&
-        ctx.isAdmin &&
-        (pol.sod || (pol.twoPerson && (f.sev === "critical" || f.kev)));
+      needSecond = ctx.isAdmin && mustRequest(ctx, f);
     if (stt === "accepted" && until[0] > addDays(localDay(), maxD)) {
       ctx.toast({
         title: "That exception is too long",
@@ -173,7 +171,7 @@ export function Detail(p) {
         title: "Risk accepted until " + until[0],
         message: f.name,
       });
-    } else if (stt === "fp" && (!ctx.isAdmin || pol.sod)) {
+    } else if (stt === "fp" && mustRequest(ctx, f)) {
       ctx.patchGov(f.key, {
         state: "requested",
         requestedState: "fp",
@@ -244,11 +242,7 @@ export function Detail(p) {
   function addNote() {
     var t = note[0].trim();
     if (!t) return;
-    var users = ((AUTH.store() || {}).users || [])
-      .filter(function (u) {
-        return !u.disabled;
-      })
-      .map(function (u) {
+    var users = AUTH.directory.map(function (u) {
         return u.username;
       });
     var men = uniq(

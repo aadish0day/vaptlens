@@ -3,13 +3,18 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "description": "Zero-trust, browser-only VAPT analytics workbench",
+  "description": "Self-hosted VAPT analytics workbench",
   "types": "design/components/index.d.ts",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build",
+    "build": "node scripts/check-tokens.mjs && tsc --noEmit && vite build",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "lint:tokens": "node scripts/check-tokens.mjs",
+    "tokens:dtcg": "node scripts/tokens-to-dtcg.mjs",
+    "server": "node server/server.mjs",
+    "test": "node scripts/selftest.mjs && node server/check.mjs",
+    "selftest": "node scripts/selftest.mjs"
   },
   "dependencies": {
     "@types/pg": "^8.23.1",
@@ -32,5 +37,8 @@
     "@vitejs/plugin-react": "^4.3.1",
     "typescript": "~5.5.4",
     "vite": "^5.4.0"
+  },
+  "engines": {
+    "node": ">=22.13"
   }
 }

@@ -11,3 +11,10 @@ dist/
 /.design-sync/.cache/
 /.design-sync/learnings/
 /.design-sync/node_modules
+
+# local API databases (may contain client data)
+*.db
+*.db-shm
+*.db-wal
+.claude/
+.freebuff/

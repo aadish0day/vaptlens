@@ -155,9 +155,8 @@ export function HostDrawer(p) {
                     <div className="drawer-item-main">
                       <span className="drawer-item-t">{x.name}</span>
                       <span className="drawer-item-m">
-                        {":" +
-                          x.port +
-                          " · CVSS " +
+                        {(x.port ? ":" + x.port + " · " : "") +
+                          "CVSS " +
                           cvssTxt(x) +
                           " · risk " +
                           x.risk}

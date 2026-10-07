@@ -9,7 +9,7 @@ import { SlaCalendar } from "@/app/views/sla/SlaCalendar";
 import { slaRange } from "@/app/views/sla/utils";
 import { SEV, SLA_DAYS, days } from "@/lib/data";
 import { AS_OF, SLA_DEFAULTS, localDay } from "@/lib/engine";
-import { verifyAudit } from "@/lib/store";
+import { AUDIT } from "@/lib/store";
 import React, { useState } from "react";
 import * as V from "@/ui";
 
@@ -197,8 +197,8 @@ export function Sla(ctx) {
           <V.Button
             key="e"
             icon="clock"
-            restricted={ctx.readOnly}
-            restrictedReason={RO_REASON}
+            restricted={!ctx.isAdmin}
+            restrictedReason="SLA windows are workspace policy: only an administrator can change them."
             onClick={function () {
               se[1]({
                 base: Object.assign({}, ctx.sla),
@@ -340,6 +340,14 @@ export function Sla(ctx) {
                   </div>
                 );
               })}
+            {a.some(function (x) {
+              return x.breached;
+            }) ? null : (
+              <V.EmptyState
+                title="No findings are past their SLA."
+                hint="Breached findings appear here, soonest overdue first."
+              />
+            )}
           </div>
         </V.WidgetCard>
       </section>
@@ -408,7 +416,9 @@ export function Sla(ctx) {
               variant="ghost"
               icon="shield-check"
               onClick={function () {
-                verifyAudit(ctx.audit, ctx.auditHead).then(vr[1]);
+                AUDIT.verify().then(vr[1], function (e) {
+                  ctx.toast({ title: "Couldn't verify the audit log", message: e.message, tone: "danger" });
+                });
               }}
             >
               {vr[0]

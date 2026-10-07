@@ -5,12 +5,13 @@ import { AUTH, passwordIssues } from "@/lib/auth";
 import React, { useState } from "react";
 
 export function ChangePasswordScreen(p) {
-  var a = useState(""),
+  var cur = useState(""),
+    a = useState(""),
     b = useState(""),
     busy = useState(false),
     err = useState("");
   var issues = passwordIssues(a[0], p.user.username),
-    ok = !issues.length && a[0] === b[0];
+    ok = !!cur[0] && !issues.length && a[0] === b[0];
   return (
     <AuthShell
       title="Set a new password"
@@ -21,19 +22,30 @@ export function ChangePasswordScreen(p) {
       err={err[0]}
       onSubmit={function () {
         busy[1](true);
-        AUTH.setPassword(p.user.id, a[0], false).then(p.onDone, function (e) {
+        AUTH.changePassword(cur[0], a[0]).then(p.onDone, function (e) {
           busy[1](false);
           err[1](e.message);
         });
       }}
     >
       <Field
+        label="Temporary password"
+        input={{
+          type: "password",
+          value: cur[0],
+          autoComplete: "current-password",
+          autoFocus: true,
+          onChange: function (e) {
+            cur[1](e.target.value);
+          },
+        }}
+      />
+      <Field
         label="New password"
         input={{
           type: "password",
           value: a[0],
           autoComplete: "new-password",
-          autoFocus: true,
           onChange: function (e) {
             a[1](e.target.value);
           },

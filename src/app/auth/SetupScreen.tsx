@@ -2,7 +2,6 @@ import { AuthShell } from "@/app/auth/AuthShell";
 import { Field } from "@/app/auth/Field";
 import { PwMeter } from "@/app/auth/PwMeter";
 import { AUTH, passwordIssues } from "@/lib/auth";
-import { SYNC } from "@/lib/sync";
 import React, { useState } from "react";
 import * as V from "@/ui";
 
@@ -12,24 +11,7 @@ export function SetupScreen(p) {
     a = useState(""),
     b = useState(""),
     busy = useState(false),
-    err = useState(""),
-    tk = useState(""),
-    jb = useState(false);
-  /* a teammate's first visit: pull the team's workspace and accounts instead of creating a new administrator */
-  function join() {
-    SYNC.setToken(tk[0]);
-    jb[1](true);
-    err[1]("");
-    SYNC.pull().then(
-      function () {
-        location.reload();
-      },
-      function (e) {
-        jb[1](false);
-        err[1](e.message);
-      },
-    );
-  }
+    err = useState("");
   var issues = passwordIssues(a[0], u[0]),
     ok =
       /^[a-z0-9._-]{3,32}$/.test(u[0].trim().toLowerCase()) &&
@@ -38,36 +20,12 @@ export function SetupScreen(p) {
   return (
     <AuthShell
       title="Create the administrator"
-      sub="VAPTLens now needs a sign-in. Accounts live only in this browser, and your password encrypts everything VAPTLens stores here. There is no reset link: if every administrator forgets their password, the data can't be recovered — add a second administrator and keep backups."
-      cta={"Create account & encrypt"}
-      busyLabel="Encrypting workspace…"
+      sub="This is a new VAPTLens server. Create the first administrator; you can add teammates from Users afterwards. Accounts and data live on this server, so you can sign in from any browser."
+      cta="Create administrator"
+      busyLabel="Creating account…"
       busy={busy[0]}
-      disabled={!ok || jb[0]}
+      disabled={!ok}
       err={err[0]}
-      foot={
-        <details className="lock-help">
-          <summary>Joining a team? Pull its workspace instead</summary>
-          <p className="lock-s">
-            Paste the team token from your administrator. The team's workspace
-            and accounts replace this screen, then you sign in with the account
-            they made for you.
-          </p>
-          <Field
-            label="Team token"
-            input={{
-              type: "password",
-              value: tk[0],
-              autoComplete: "off",
-              onChange: function (e) {
-                tk[1](e.target.value);
-              },
-            }}
-          />
-          <V.Button size="sm" disabled={!tk[0].trim() || jb[0]} onClick={join}>
-            {jb[0] ? "Pulling…" : "Pull team workspace"}
-          </V.Button>
-        </details>
-      }
       onSubmit={function () {
         if (!ok) return;
         busy[1](true);
@@ -76,11 +34,8 @@ export function SetupScreen(p) {
           name: n[0],
           password: a[0],
         }).then(
-          function () {
-            p.onDone({
-              user: AUTH.user,
-              first: true,
-            });
+          function (r) {
+            p.onDone(r);
           },
           function (e) {
             busy[1](false);

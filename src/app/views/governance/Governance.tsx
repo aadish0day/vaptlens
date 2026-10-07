@@ -6,7 +6,7 @@ import { Frameworks } from "@/app/views/governance/Frameworks";
 import { Policies } from "@/app/views/governance/Policies";
 import { RiskMoney } from "@/app/views/governance/RiskMoney";
 import { govFacts } from "@/app/views/governance/utils";
-import { verifyAudit } from "@/lib/store";
+import { AUDIT } from "@/lib/store";
 import React, { useEffect, useMemo, useState } from "react";
 import * as V from "@/ui";
 
@@ -43,9 +43,11 @@ export function Governance(ctx) {
   var A = useState(null);
   useEffect(
     function () {
-      verifyAudit(ctx.audit, ctx.auditHead).then(A[1]);
+      AUDIT.verify().then(A[1], function () {
+        A[1](null);
+      });
     },
-    [ctx.audit, ctx.auditHead],
+    [ctx.audit],
   );
   return (
     <div className="page">

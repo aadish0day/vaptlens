@@ -14,10 +14,6 @@ export function AuthShell(p) {
       >
         <div className="lock-brand">
           <V.Logo size={26} />
-          <span className="st-local">
-            <span className="led" />
-            LOCAL ONLY
-          </span>
         </div>
         <h1 className="lock-t">{p.title}</h1>
         {p.sub ? <p className="lock-s">{p.sub}</p> : null}

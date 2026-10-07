@@ -1,4 +1,4 @@
-import { SEV_LABEL, count, hostLabel, nowIso } from "@/app/lib/common";
+import { SEV_LABEL, count, hostLabel, mustRequest, nowIso } from "@/app/lib/common";
 import { findingByKey, saveFile, toCsv } from "@/app/lib/export";
 import { addDays } from "@/app/views/findings/utils";
 import { SEV, days } from "@/lib/data";
@@ -90,7 +90,7 @@ export function ExceptionRegister(p) {
             }) || {}
           ).f || {};
         var d = Math.min(90, (pol.maxDays || {})[f.sev] || 90);
-        if (pol.twoPerson && (f.sev === "critical" || f.kev))
+        if (mustRequest(ctx, f))
           return {
             state: "requested",
             requestedState: "accepted",

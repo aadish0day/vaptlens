@@ -96,3 +96,13 @@ export function uniq(a) {
 }
 
 /* ================= Root: sign in → boot ================= */
+
+/* Does this decision (accept risk / false positive / renewal) have to go through a request that someone else
+   approves? Mirrors checkRemediation in server/server.mjs, which enforces it: non-admins always request;
+   with separation of duties on (the default) everyone does; otherwise critical and KEV findings need a second person. */
+export function mustRequest(ctx, f) {
+  var pol = ctx.policy || {};
+  if (!ctx.isAdmin) return true;
+  if (pol.sod !== false) return true;
+  return !!(pol.twoPerson && (!f || f.sev === "critical" || f.kev));
+}

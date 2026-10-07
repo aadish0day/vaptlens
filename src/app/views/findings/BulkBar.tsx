@@ -1,4 +1,4 @@
-import { hostLabel, nowIso, uniq } from "@/app/lib/common";
+import { hostLabel, mustRequest, nowIso, uniq } from "@/app/lib/common";
 import { addDays } from "@/app/views/findings/utils";
 import { TEAMS } from "@/lib/data";
 import { localDay } from "@/lib/engine";
@@ -177,12 +177,7 @@ export function BulkBar(p) {
             localDay(),
             Math.min(90, (pol.maxDays || {})[f.sev] || 90),
           );
-        var second =
-          ctx.isAdmin &&
-          (pol.sod ||
-            (pol.twoPerson &&
-              kind !== "fp" &&
-              (f.sev === "critical" || f.kev)));
+        var second = ctx.isAdmin && mustRequest(ctx, f);
         if (ctx.isAdmin && !second)
           return kind === "fp"
             ? {

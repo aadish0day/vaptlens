@@ -1,9 +1,7 @@
 import { AuthShell } from "@/app/auth/AuthShell";
 import { Field } from "@/app/auth/Field";
 import { AUTH } from "@/lib/auth";
-import { WS } from "@/lib/store";
 import React, { useState } from "react";
-import * as V from "@/ui";
 
 export function LoginScreen(p) {
   var u = useState(function () {
@@ -20,12 +18,10 @@ export function LoginScreen(p) {
     <AuthShell
       title="Sign in"
       sub={
-        "Workspace: " +
-        WS.current() +
-        ". Your password unlocks the encrypted data in this browser and is never sent anywhere."
+"Sign in with the account an administrator gave you."
       }
       cta="Sign in"
-      busyLabel="Unlocking…"
+      busyLabel="Signing in…"
       busy={busy[0]}
       disabled={!u[0] || !pw[0]}
       err={err[0]}
@@ -50,20 +46,11 @@ export function LoginScreen(p) {
         <details className="lock-help">
           <summary>Forgot your password?</summary>
           <p className="lock-s">
-            Ask an administrator to reset it from Users. If no administrator can
-            sign in, the encrypted data can't be recovered; you can erase it and
-            start again.
+            Ask an administrator to reset it from Users; you'll get a temporary
+            password and choose your own at sign-in. If the only administrator
+            is locked out, whoever runs the server can reset it with{" "}
+            <code>node server/server.mjs reset-password &lt;username&gt;</code>.
           </p>
-          <V.Button
-            size="sm"
-            variant="danger"
-            type="button"
-            onClick={function () {
-              if (p.onErase) p.onErase();
-            }}
-          >
-            Erase this workspace…
-          </V.Button>
         </details>
       }
     >

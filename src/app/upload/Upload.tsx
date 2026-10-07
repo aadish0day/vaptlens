@@ -2,6 +2,7 @@ import { uniq } from "@/app/lib/common";
 import { presetMap } from "@/app/upload/utils";
 import { detectTool, guessMapping } from "@/lib/data";
 import { localDay, sourceOf } from "@/lib/engine";
+import { addDays } from "@/app/views/findings/utils";
 import {
   FORMATS_HELP,
   SCAN_ACCEPT,
@@ -10,8 +11,13 @@ import {
   rowsFromTable,
 } from "@/lib/parsers";
 import { readFileText } from "@/lib/store";
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import * as V from "@/ui";
+
+/* a scan can't be from the future: a misparsed or skewed date would age every finding (tomorrow allowed for time zones) */
+function notFuture(d) {
+  return !!d && d <= addDays(localDay(), 1);
+}
 
 export function Upload(p) {
   var fs = useState([]),
@@ -74,6 +80,10 @@ export function Upload(p) {
   function readFile(f) {
     return readFileText(f);
   }
+  /* files dropped before the dialog opened (e.g. on an empty view) are parsed right away */
+  useEffect(function () {
+    if (p.initialFiles && p.initialFiles.length) handle(p.initialFiles);
+  }, []);
   function handle(list) {
     var arr = Array.prototype.slice.call(list || []);
     if (!arr.length) return;
@@ -120,7 +130,7 @@ export function Upload(p) {
                         .map(function (x) {
                           return isoDay(x[dcol]);
                         })
-                        .filter(Boolean)
+                        .filter(notFuture)
                         .sort()
                         .pop()
                     : null,
@@ -240,7 +250,7 @@ export function Upload(p) {
       .map(function (f) {
         return f.scanDate;
       })
-      .filter(Boolean)
+      .filter(notFuture)
       .sort()
       .pop() || null;
   var scanDate = dt[0] || detected || today;
@@ -311,7 +321,9 @@ export function Upload(p) {
   return (
     <V.Modal
       title="Upload scans"
-      subtitle="Drop one or many exports at once. Everything is parsed in this tab; nothing is uploaded."
+      /* closing by backdrop/Esc/× with files staged asks first, so parsing and column mapping aren't lost by accident */
+      onCloseGuard={files.length ? "Discard " + files.length + " staged file(s) and their column mapping?" : null}
+      subtitle="Drop one or many exports at once. Files are parsed in this tab; only the findings are saved to your VAPTLens server."
       onClose={p.onClose}
       width="760px"
       footer={

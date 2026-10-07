@@ -77,7 +77,7 @@ export function CvssCalc(p) {
       width="720px"
       onClose={p.onClose}
       footer={[
-        (ctx.gov[f.key] || {}).cvssVector ? (
+        (ctx.gov[f.key] || {}).cvssVector && ctx.isAdmin ? (
           <V.Button key="x" variant="ghost" onClick={clear}>
             Use scanner score
           </V.Button>
@@ -89,6 +89,8 @@ export function CvssCalc(p) {
           key="s"
           variant="primary"
           disabled={score == null}
+          restricted={!ctx.isAdmin}
+          restrictedReason="Re-scoring changes severity, SLA and who must approve, so only an administrator can save it. Use the calculator to work out the vector and ask one."
           onClick={save}
         >
           Save score

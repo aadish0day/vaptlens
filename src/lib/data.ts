@@ -68,55 +68,10 @@ export function computeExploitable(f) {
 /* CISA KEV subset — campaign names + CVE IDs (offline, bundled) */
 
 /* CISA KEV subset — campaign names + CVE IDs (offline, bundled) */
-export var KEV_NAMES =
-  /eternalblue|bluekeep|log4shell|log4j|proxyshell|proxylogon|proxynotshell|spring4shell|moveit|citrixbleed|citrix bleed|printnightmare|zerologon|follina|heartbleed|shellshock|pwnkit|dirty ?pipe|text4shell|confluence ognl|papercut|goanywhere|screenconnect|regresshion/i;
+import KEV_BUNDLED from "../../server/kev-bundled.json";
+export var KEV_NAMES = new RegExp(KEV_BUNDLED.namesPattern, "i");
 
-export var KEV_IDS = [
-  "CVE-2017-0144",
-  "CVE-2017-0145",
-  "CVE-2019-0708",
-  "CVE-2021-44228",
-  "CVE-2021-45046",
-  "CVE-2021-34473",
-  "CVE-2021-34523",
-  "CVE-2021-31207",
-  "CVE-2021-26855",
-  "CVE-2022-41040",
-  "CVE-2022-41082",
-  "CVE-2022-22965",
-  "CVE-2023-34362",
-  "CVE-2023-4966",
-  "CVE-2021-34527",
-  "CVE-2020-1472",
-  "CVE-2022-30190",
-  "CVE-2014-0160",
-  "CVE-2014-6271",
-  "CVE-2021-4034",
-  "CVE-2022-0847",
-  "CVE-2021-41773",
-  "CVE-2021-42013",
-  "CVE-2024-21762",
-  "CVE-2023-27997",
-  "CVE-2022-40684",
-  "CVE-2023-20198",
-  "CVE-2024-3400",
-  "CVE-2023-46805",
-  "CVE-2024-21887",
-  "CVE-2023-22515",
-  "CVE-2022-26134",
-  "CVE-2023-27350",
-  "CVE-2023-0669",
-  "CVE-2024-1709",
-  "CVE-2019-11510",
-  "CVE-2019-19781",
-  "CVE-2018-13379",
-  "CVE-2020-5902",
-  "CVE-2023-3519",
-  "CVE-2021-22986",
-  "CVE-2024-6387",
-  "CVE-2017-5638",
-  "CVE-2023-44487",
-];
+export var KEV_IDS: string[] = KEV_BUNDLED.ids;
 
 export function isKev(f) {
   var cv = (f.cves || []).map(function (c) {
@@ -265,7 +220,7 @@ export function isEol(f) {
 }
 
 export function isRansom(f) {
-  return /smbv1|eternalblue|remote desktop|rdp|default root|unauthenticated|ssl-vpn|pre-auth/i.test(
+  return /smbv1|eternalblue|remote desktop|\brdp\b|default root|unauthenticated|ssl-vpn|pre-auth/i.test(
     f.name,
   );
 }
@@ -689,33 +644,35 @@ export function normSev(raw, cvss?) {
   var s = String(raw == null ? "" : raw)
     .trim()
     .toLowerCase();
-  if (/^crit/.test(s)) return "critical";
-  if (/^high|important/.test(s)) return "high";
-  if (/^med|moderate/.test(s)) return "medium";
-  if (/^low/.test(s)) return "low";
-  if (/^info|none|log/.test(s) || s === "0") return "info";
+  if (/^(crit|urgent|emergency|severe|p0\b|p1\b|s1\b)/.test(s)) return "critical";
+  if (/^(high|important|serious|error|major|p2\b|s2\b)/.test(s)) return "high";
+  if (/^(med|moderate|warn|p3\b|s3\b)/.test(s)) return "medium";
+  if (/^(low|minor|note|p4\b|s4\b)/.test(s)) return "low";
+  if (/^(info|none|log|p5\b|s5\b)/.test(s) || s === "0") return "info";
 
-  var n = parseFloat(s);
   var c = parseFloat(cvss);
-  if (!isNaN(n) && String(n) === s) {
-    if (n > 5 || s.indexOf('.') >= 0 || n === c) {
+  /* numbers: "4.0", "7", "10.0". Decimals and values above 5 are CVSS-like; whole numbers 1–5 are a 1–5 scale
+     unless they equal the CVSS column */
+  if (/^\d+(\.\d+)?$/.test(s)) {
+    var n = parseFloat(s);
+    if (n > 5 || s.indexOf(".") >= 0 || n === c) {
       if (n >= 9) return "critical";
       if (n >= 7) return "high";
       if (n >= 4) return "medium";
-      if (n >= 1) return "low";
+      if (n > 0) return "low";
       return "info";
-    } else {
-      if (n === 5) return "critical";
-      if (n === 4) return "high";
-      if (n === 3) return "medium";
-      if (n === 2) return "low";
-      if (n === 1) return "info";
     }
+    if (n === 5) return "critical";
+    if (n === 4) return "high";
+    if (n === 3) return "medium";
+    if (n === 2) return "low";
+    return "info";
   }
 
   if (c >= 9) return "critical";
   if (c >= 7) return "high";
   if (c >= 4) return "medium";
   if (c > 0) return "low";
-  return "info";
+  /* a severity word we don't know and no score: don't bury it as info — medium keeps it in the queue */
+  return s ? "medium" : "info";
 }

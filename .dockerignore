@@ -4,3 +4,13 @@ dist
 *.log
 .DS_Store
 tests/node_modules
+.env
+.env.*
+!.env.example
+*.db
+*.db-*
+.claude
+.ds-sync
+ds-bundle
+.design-sync
+test-data

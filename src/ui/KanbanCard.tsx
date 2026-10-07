@@ -28,6 +28,7 @@ export function KanbanCard(props) {
         <button
           type="button"
           className="vl-kcard-title vl-kcard-open"
+          data-kmove={props.moveId ? props.moveId + ":open" : undefined}
           onClick={props.onOpen}
         >
           {props.title}
@@ -49,7 +50,8 @@ export function KanbanCard(props) {
           <button
             type="button"
             className="vl-icon-btn"
-            aria-label="Move back"
+            aria-label={props.backLabel || "Move back"}
+            data-kmove={props.moveId ? props.moveId + ":back" : undefined}
             onClick={props.onBack}
             disabled={!props.onBack}
           >
@@ -58,7 +60,8 @@ export function KanbanCard(props) {
           <button
             type="button"
             className="vl-icon-btn"
-            aria-label="Move forward"
+            aria-label={props.forwardLabel || "Move forward"}
+            data-kmove={props.moveId ? props.moveId + ":forward" : undefined}
             onClick={props.onForward}
             disabled={!props.onForward}
           >
