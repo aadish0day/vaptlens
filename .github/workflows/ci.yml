@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: vl
+          POSTGRES_PASSWORD: vl
+          POSTGRES_DB: vl_ci
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U vl" --health-interval 5s
+          --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Engine self-tests + API check (SQLite)
+        run: npm test
+      - name: API check (Postgres)
+        run: node server/check.mjs
+        env:
+          DATABASE_URL: postgres://vl:vl@localhost:5432/vl_ci
+      - run: npm audit --omit=dev --audit-level=high
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build --target runtime -t vaptlens-web .
+      - run: docker build --target sync -t vaptlens-sync .
