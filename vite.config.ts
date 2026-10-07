@@ -15,6 +15,11 @@ export default defineConfig({
     sourcemap: true,
     chunkSizeWarningLimit: 1500,
     rollupOptions: {
+      /* "/" is the landing page (src/landing/); the app is its own page at /app/ */
+      input: {
+        main: fileURLToPath(new URL("./index.html", import.meta.url)),
+        app: fileURLToPath(new URL("./app/index.html", import.meta.url)),
+      },
       output: {
         manualChunks: {
           react: ["react", "react-dom", "react-grid-layout"],
