@@ -2,6 +2,8 @@ node_modules/
 dist/
 *.log
 .DS_Store
+*.swp
+*~
 .env*
 !.env.example
 
@@ -16,5 +18,10 @@ dist/
 *.db
 *.db-shm
 *.db-wal
+
+# editor / agent tool state
 .claude/
 .freebuff/
+.impeccable/
+.vscode/
+.idea/

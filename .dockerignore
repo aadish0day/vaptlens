@@ -14,3 +14,7 @@ tests/node_modules
 ds-bundle
 .design-sync
 test-data
+.github
+.freebuff
+.impeccable
+docs
