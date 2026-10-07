@@ -1,0 +1,54 @@
+<!-- @dsCard group="Governance" height=260 -->
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>RaciMatrix — preview</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 16px;
+        background: var(--canvas);
+        color: var(--ink);
+        font-family: var(--font-sans);
+        font-size: 13px;
+      }
+      .row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        align-items: center;
+      }
+      .col {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+      var V = window.VAPTLens,
+        h = React.createElement;
+      function R(el) {
+        ReactDOM.createRoot(document.getElementById("root")).render(el);
+      }
+      R(
+        h(
+          "div",
+          { style: { maxWidth: "640px" } },
+          h(V.RaciMatrix, {
+            data: {
+              "Server Team": { R: 9, A: 2, C: 4, I: 6 },
+              "DevOps / Cloud": { R: 5, A: 1, C: 3, I: 2 },
+              "Database DBAs": { R: 4, A: 4, C: 1, I: 0 },
+              SecOps: { R: 1, A: 12, C: 6, I: 18 },
+              "Application Dev": { R: 7, A: 0, C: 2, I: 3 },
+            },
+          }),
+        ),
+      );
+    </script>
+  </body>
+</html>

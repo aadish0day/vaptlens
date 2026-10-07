@@ -1,0 +1,55 @@
+<!-- @dsCard group="Governance" height=220 -->
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>SlaTrend — preview</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 16px;
+        background: var(--canvas);
+        color: var(--ink);
+        font-family: var(--font-sans);
+        font-size: 13px;
+      }
+      .row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        align-items: center;
+      }
+      .col {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+      var V = window.VAPTLens,
+        h = React.createElement;
+      function R(el) {
+        ReactDOM.createRoot(document.getElementById("root")).render(el);
+      }
+      R(
+        h(
+          "div",
+          { style: { maxWidth: "420px" } },
+          h(V.SlaTrend, {
+            months: [
+              { label: "Feb", pct: 44 },
+              { label: "Mar", pct: 52 },
+              { label: "Apr", pct: 61 },
+              { label: "May", pct: 73 },
+              { label: "Jun", pct: 78 },
+              { label: "Jul", pct: 84 },
+            ],
+          }),
+        ),
+      );
+    </script>
+  </body>
+</html>

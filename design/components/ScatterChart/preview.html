@@ -1,0 +1,98 @@
+<!-- @dsCard group="Charts" height=300 -->
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>ScatterChart — preview</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 16px;
+        background: var(--canvas);
+        color: var(--ink);
+        font-family: var(--font-sans);
+        font-size: 13px;
+      }
+      .row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        align-items: center;
+      }
+      .col {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+      var V = window.VAPTLens,
+        h = React.createElement;
+      function R(el) {
+        ReactDOM.createRoot(document.getElementById("root")).render(el);
+      }
+      R(
+        h(
+          "div",
+          { style: { maxWidth: "560px" } },
+          h(V.ScatterChart, {
+            categories: ["10.100.1.10", "10.100.2.12", "app.internal.corp"],
+            points: [
+              {
+                category: "10.100.1.10",
+                cvss: 9.8,
+                severity: "critical",
+                name: "Tomcat RCE",
+              },
+              {
+                category: "10.100.1.10",
+                cvss: 7.5,
+                severity: "high",
+                name: "Path traversal",
+              },
+              {
+                category: "10.100.1.10",
+                cvss: 5.3,
+                severity: "medium",
+                name: "HSTS",
+              },
+              {
+                category: "10.100.2.12",
+                cvss: 9.8,
+                severity: "critical",
+                name: "MySQL root",
+              },
+              {
+                category: "10.100.2.12",
+                cvss: 4.3,
+                severity: "medium",
+                name: "Outdated MySQL",
+              },
+              {
+                category: "app.internal.corp",
+                cvss: 8.6,
+                severity: "high",
+                name: "SQLi",
+              },
+              {
+                category: "app.internal.corp",
+                cvss: 6.1,
+                severity: "medium",
+                name: "XSS",
+              },
+              {
+                category: "app.internal.corp",
+                cvss: 2.6,
+                severity: "low",
+                name: "Banner",
+              },
+            ],
+          }),
+        ),
+      );
+    </script>
+  </body>
+</html>

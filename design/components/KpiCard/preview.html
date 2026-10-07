@@ -1,0 +1,65 @@
+<!-- @dsCard group="Data display" height=140 -->
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>KpiCard — preview</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 16px;
+        background: var(--canvas);
+        color: var(--ink);
+        font-family: var(--font-sans);
+      }
+      .row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        align-items: center;
+      }
+      .col {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+      var V = window.VAPTLens,
+        h = React.createElement;
+      function R(el) {
+        ReactDOM.createRoot(document.getElementById("root")).render(el);
+      }
+      R(
+        h(
+          "div",
+          { className: "row", style: { alignItems: "stretch" } },
+          h(V.KpiCard, {
+            label: "Active findings",
+            value: "1,284",
+            sub: "+36 since last scan",
+            icon: "shield",
+          }),
+          h(V.KpiCard, {
+            label: "SLA breached",
+            value: "47",
+            tone: "critical",
+            sub: "12 critical",
+            icon: "clock",
+            onClick: function () {},
+            active: true,
+          }),
+          h(V.KpiCard, {
+            label: "SLA compliance",
+            value: "82%",
+            tone: "ok",
+            sub: "Target 80%",
+          }),
+        ),
+      );
+    </script>
+  </body>
+</html>

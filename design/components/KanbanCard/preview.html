@@ -1,0 +1,70 @@
+<!-- @dsCard group="Workflow" height=200 -->
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>KanbanCard — preview</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 16px;
+        background: var(--canvas);
+        color: var(--ink);
+        font-family: var(--font-sans);
+      }
+      .row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        align-items: center;
+      }
+      .col {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+      var V = window.VAPTLens,
+        h = React.createElement;
+      function R(el) {
+        ReactDOM.createRoot(document.getElementById("root")).render(el);
+      }
+      R(
+        h(
+          "div",
+          { className: "row", style: { alignItems: "flex-start" } },
+          h(
+            "div",
+            { style: { width: "280px" } },
+            h(V.KanbanCard, {
+              severity: "critical",
+              title: "MySQL Default Root Password",
+              host: "10.100.2.12:3306",
+              ticket: "SEC-0142",
+              tags: ["ransomware", "breached"],
+              team: "Database DBAs",
+              onForward: function () {},
+            }),
+          ),
+          h(
+            "div",
+            { style: { width: "280px" } },
+            h(V.KanbanCard, {
+              severity: "high",
+              title: "Apache HTTP Server Path Traversal (CVE-2021-41773)",
+              host: "10.100.1.10:80",
+              tags: ["kev", "exploitable"],
+              team: "Server Team",
+              onBack: function () {},
+              onForward: function () {},
+            }),
+          ),
+        ),
+      );
+    </script>
+  </body>
+</html>

@@ -1,0 +1,915 @@
+/* VAPTLens design tokens for Tailwind CSS v4. Generated from tokens.json v7; don't edit by hand. */
+@import "tailwindcss";
+
+/* Themes: set data-theme on <html>: dark | light | cvd | hc | midnight | matrix | neon | teal | paper | enterprise (dark is the default) */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *, [data-theme="cvd"], [data-theme="cvd"] *, [data-theme="hc"], [data-theme="hc"] *, [data-theme="midnight"], [data-theme="midnight"] *, [data-theme="matrix"], [data-theme="matrix"] *, [data-theme="neon"], [data-theme="neon"] *, [data-theme="teal"], [data-theme="teal"] *));
+
+:root,
+[data-theme="dark"] {
+  --canvas: #0a0b0d;
+  --surface-100: #111317;
+  --surface-200: #171a1f;
+  --surface-300: #1f232a;
+  --border: #23272e;
+  --border-strong: #5d6470;
+  --ink: #e8eaed;
+  --ink-muted: #9aa0a8;
+  --ink-subtle: #8a9099;
+  --lens: #e8eaed;
+  --lens-strong: #ffffff;
+  --lens-soft: #1f242b;
+  --on-lens: #0a0b0d;
+  --signal: #ffb020;
+  --signal-soft: #2a1f08;
+  --on-signal: #1a1000;
+  --scrim: rgba(3, 6, 9, 0.64);
+  --tooltip-bg: var(--surface-300);
+  --focus-ring: var(--signal);
+  --sev-critical: #ff4d6a;
+  --sev-high: #ff8a3d;
+  --sev-medium: #e9cf4a;
+  --sev-low: #4cc3e0;
+  --sev-info: #9aa0a8;
+  --sev-critical-soft: #35111a;
+  --sev-high-soft: #33190a;
+  --sev-medium-soft: #2c270b;
+  --sev-low-soft: #0b2830;
+  --sev-info-soft: #1c1f24;
+  --status-ok: #3ecf8e;
+  --status-ok-soft: #0b2a1e;
+  --status-warn: #e9cf4a;
+  --status-warn-soft: #2c270b;
+  --status-danger: var(--sev-critical);
+  --status-danger-soft: var(--sev-critical-soft);
+  --threat-zeroday: #d98bf2;
+  --threat-zeroday-soft: #2e1838;
+  --threat-kev: var(--sev-critical);
+  --threat-ransomware: var(--sev-high);
+  --chart-1: #6ea2ff;
+  --chart-2: #3ecfbf;
+  --chart-3: #f5c542;
+  --chart-4: #f28cb8;
+  --chart-5: #a3d977;
+  --chart-6: #9aa0a8;
+  --chart-grid: #1d2026;
+  --chart-axis: var(--ink-muted);
+  --chart-selected: var(--lens);
+  --heat-0: #15181c;
+  --heat-1: #232830;
+  --heat-2: #353c47;
+  --heat-3: #5b6573;
+  --heat-4: #9ea7b3;
+  --heat-5: #e8eaed;
+  --report-slate: #16181c;
+  --report-navy: #132c55;
+  --report-crimson: #7a1426;
+  --on-report: #ffffff;
+  --report-rule: #b36b00;
+  --shadow-card:
+    inset 0 1px 0 rgba(255, 255, 255, 0.035), 0 1px 0 rgba(0, 0, 0, 0.5),
+    0 2px 6px rgba(0, 0, 0, 0.25);
+  --shadow-raised:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 4px 12px rgba(0, 0, 0, 0.45);
+  --shadow-overlay:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 16px 40px rgba(0, 0, 0, 0.6),
+    0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+[data-theme="light"] {
+  --canvas: #f3f4f6;
+  --surface-100: #ffffff;
+  --surface-200: #f0f1f3;
+  --surface-300: #e3e5e9;
+  --border: #dfe1e5;
+  --border-strong: #737a85;
+  --ink: #0d0f12;
+  --ink-muted: #4b525c;
+  --ink-subtle: #5c636e;
+  --lens: #0d0f12;
+  --lens-strong: #000000;
+  --lens-soft: #e6e8ec;
+  --on-lens: #ffffff;
+  --signal: #a15f00;
+  --signal-soft: #fff1d6;
+  --on-signal: #ffffff;
+  --scrim: rgba(15, 26, 36, 0.4);
+  --tooltip-bg: var(--surface-300);
+  --focus-ring: #a15f00;
+  --sev-critical: #c8173a;
+  --sev-high: #b54a06;
+  --sev-medium: #806000;
+  --sev-low: #0e7490;
+  --sev-info: #4b525c;
+  --sev-critical-soft: #fde6ea;
+  --sev-high-soft: #fdeadb;
+  --sev-medium-soft: #f8f0cf;
+  --sev-low-soft: #dcf3f8;
+  --sev-info-soft: #ecedf0;
+  --status-ok: #047857;
+  --status-ok-soft: #dcf5ea;
+  --status-warn: #806000;
+  --status-warn-soft: #f8f0cf;
+  --status-danger: var(--sev-critical);
+  --status-danger-soft: var(--sev-critical-soft);
+  --threat-zeroday: #8a2fb0;
+  --threat-zeroday-soft: #f5e6fb;
+  --threat-kev: var(--sev-critical);
+  --threat-ransomware: var(--sev-high);
+  --chart-1: #1d5fcf;
+  --chart-2: #0f766e;
+  --chart-3: #8a5c00;
+  --chart-4: #b0336e;
+  --chart-5: #4d7a1f;
+  --chart-6: #4b525c;
+  --chart-grid: #e6e8eb;
+  --chart-axis: var(--ink-muted);
+  --chart-selected: var(--lens);
+  --heat-0: #f1f2f4;
+  --heat-1: #dfe2e6;
+  --heat-2: #c3c8cf;
+  --heat-3: #8a929d;
+  --heat-4: #454c56;
+  --heat-5: #0d0f12;
+  --report-slate: #16181c;
+  --report-navy: #132c55;
+  --report-crimson: #7a1426;
+  --on-report: #ffffff;
+  --report-rule: #b36b00;
+  --shadow-card:
+    0 1px 2px rgba(13, 15, 18, 0.06), 0 2px 8px rgba(13, 15, 18, 0.04);
+  --shadow-raised:
+    0 2px 4px rgba(13, 15, 18, 0.06), 0 8px 20px rgba(13, 15, 18, 0.08);
+  --shadow-overlay:
+    0 16px 40px rgba(13, 15, 18, 0.16), 0 2px 8px rgba(13, 15, 18, 0.08);
+}
+
+[data-theme="cvd"] {
+  --canvas: #0a0b0d;
+  --surface-100: #111317;
+  --surface-200: #171a1f;
+  --surface-300: #1f232a;
+  --border: #23272e;
+  --border-strong: #5d6470;
+  --ink: #e8eaed;
+  --ink-muted: #9aa0a8;
+  --ink-subtle: #8a9099;
+  --lens: #e8eaed;
+  --lens-strong: #ffffff;
+  --lens-soft: #1f242b;
+  --on-lens: #0a0b0d;
+  --signal: #ffb020;
+  --signal-soft: #2a1f08;
+  --on-signal: #1a1000;
+  --scrim: rgba(3, 6, 9, 0.64);
+  --tooltip-bg: var(--surface-300);
+  --focus-ring: var(--signal);
+  --sev-critical: #f5418e;
+  --sev-high: #ffa640;
+  --sev-medium: #f0e442;
+  --sev-low: #56b4e9;
+  --sev-info: #a1a1aa;
+  --sev-critical-soft: #35121f;
+  --sev-high-soft: #3a2610;
+  --sev-medium-soft: #33300c;
+  --sev-low-soft: #0f2a3d;
+  --sev-info-soft: #202024;
+  --status-ok: #56b4e9;
+  --status-ok-soft: #0f2a3d;
+  --status-warn: #f0e442;
+  --status-warn-soft: #33300c;
+  --status-danger: var(--sev-critical);
+  --status-danger-soft: var(--sev-critical-soft);
+  --threat-zeroday: #cc9cf5;
+  --threat-zeroday-soft: #2a1a3a;
+  --threat-kev: var(--sev-critical);
+  --threat-ransomware: var(--sev-high);
+  --chart-1: #6ea2ff;
+  --chart-2: #56b4e9;
+  --chart-3: #f0e442;
+  --chart-4: #f5418e;
+  --chart-5: #ffa640;
+  --chart-6: #a3b1bf;
+  --chart-grid: #1d2026;
+  --chart-axis: var(--ink-muted);
+  --chart-selected: var(--lens);
+  --heat-0: #15181c;
+  --heat-1: #232830;
+  --heat-2: #353c47;
+  --heat-3: #5b6573;
+  --heat-4: #9ea7b3;
+  --heat-5: #e8eaed;
+  --report-slate: #16181c;
+  --report-navy: #132c55;
+  --report-crimson: #7a1426;
+  --on-report: #ffffff;
+  --report-rule: #b36b00;
+  --shadow-card:
+    inset 0 1px 0 rgba(255, 255, 255, 0.035), 0 1px 0 rgba(0, 0, 0, 0.5),
+    0 2px 6px rgba(0, 0, 0, 0.25);
+  --shadow-raised:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 4px 12px rgba(0, 0, 0, 0.45);
+  --shadow-overlay:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 16px 40px rgba(0, 0, 0, 0.6),
+    0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+[data-theme="hc"] {
+  --canvas: #000000;
+  --surface-100: #0a0a0a;
+  --surface-200: #161616;
+  --surface-300: #222222;
+  --border: #6e6e6e;
+  --border-strong: #a8a8a8;
+  --ink: #ffffff;
+  --ink-muted: #dcdcdc;
+  --ink-subtle: #c4c4c4;
+  --lens: #ffffff;
+  --lens-strong: #ffffff;
+  --lens-soft: #262626;
+  --on-lens: #000000;
+  --signal: #ffc24d;
+  --signal-soft: #2e2205;
+  --on-signal: #000000;
+  --scrim: rgba(0, 0, 0, 0.8);
+  --tooltip-bg: var(--surface-300);
+  --focus-ring: var(--signal);
+  --sev-critical: #ff8aa0;
+  --sev-high: #ffb070;
+  --sev-medium: #ffe066;
+  --sev-low: #7fe6f5;
+  --sev-info: #c8d2dc;
+  --sev-critical-soft: #2a0710;
+  --sev-high-soft: #2a1405;
+  --sev-medium-soft: #262000;
+  --sev-low-soft: #04222a;
+  --sev-info-soft: #141a20;
+  --status-ok: #6ee7b0;
+  --status-ok-soft: #032418;
+  --status-warn: #ffc94d;
+  --status-warn-soft: #261c00;
+  --status-danger: var(--sev-critical);
+  --status-danger-soft: var(--sev-critical-soft);
+  --threat-zeroday: #e8b0ff;
+  --threat-zeroday-soft: #200a2a;
+  --threat-kev: var(--sev-critical);
+  --threat-ransomware: var(--sev-high);
+  --chart-1: #8ab4ff;
+  --chart-2: #5ff5e0;
+  --chart-3: #ffe066;
+  --chart-4: #ff9fca;
+  --chart-5: #bfee8f;
+  --chart-6: #c8d2dc;
+  --chart-grid: #3a3a3a;
+  --chart-axis: var(--ink-muted);
+  --chart-selected: var(--lens);
+  --heat-0: #111111;
+  --heat-1: #262626;
+  --heat-2: #2e2e2e;
+  --heat-3: #6b6b6b;
+  --heat-4: #b3b3b3;
+  --heat-5: #ffffff;
+  --report-slate: #16181c;
+  --report-navy: #132c55;
+  --report-crimson: #7a1426;
+  --on-report: #ffffff;
+  --report-rule: #b36b00;
+  --shadow-card: 0 0 0 0 rgba(0, 0, 0, 0);
+  --shadow-raised: 0 0 0 1px #ffffff;
+  --shadow-overlay: 0 0 0 1px #ffffff;
+}
+
+[data-theme="midnight"] {
+  --canvas: #0a0f1e;
+  --surface-100: #0f1629;
+  --surface-200: #141d35;
+  --surface-300: #1b2644;
+  --border: #222d4d;
+  --border-strong: #5a6a93;
+  --ink: #e6ebf7;
+  --ink-muted: #a0abc6;
+  --ink-subtle: #8e9abb;
+  --lens: #e6ebf7;
+  --lens-strong: #ffffff;
+  --lens-soft: #1b2648;
+  --on-lens: #0a0f1e;
+  --signal: #8fb0ff;
+  --signal-soft: #18244a;
+  --on-signal: #0a1024;
+  --scrim: rgba(4, 8, 20, 0.66);
+  --tooltip-bg: var(--surface-300);
+  --focus-ring: #8fb0ff;
+  --sev-critical: #ff4d6a;
+  --sev-high: #ff8a3d;
+  --sev-medium: #e9cf4a;
+  --sev-low: #4cc3e0;
+  --sev-info: #a0abc6;
+  --sev-critical-soft: #35111a;
+  --sev-high-soft: #33190a;
+  --sev-medium-soft: #2c270b;
+  --sev-low-soft: #0b2830;
+  --sev-info-soft: #172040;
+  --status-ok: #3ecf8e;
+  --status-ok-soft: #0b2a1e;
+  --status-warn: #e9cf4a;
+  --status-warn-soft: #2c270b;
+  --status-danger: var(--sev-critical);
+  --status-danger-soft: var(--sev-critical-soft);
+  --threat-zeroday: #d98bf2;
+  --threat-zeroday-soft: #2e1838;
+  --threat-kev: var(--sev-critical);
+  --threat-ransomware: var(--sev-high);
+  --chart-1: #6ea2ff;
+  --chart-2: #3ecfbf;
+  --chart-3: #f5c542;
+  --chart-4: #f28cb8;
+  --chart-5: #a3d977;
+  --chart-6: #a0abc6;
+  --chart-grid: #19223d;
+  --chart-axis: var(--ink-muted);
+  --chart-selected: var(--lens);
+  --heat-0: #111a30;
+  --heat-1: #1c2745;
+  --heat-2: #2c3a62;
+  --heat-3: #4d5f8f;
+  --heat-4: #97a6cc;
+  --heat-5: #e6ebf7;
+  --report-slate: #16181c;
+  --report-navy: #132c55;
+  --report-crimson: #7a1426;
+  --on-report: #ffffff;
+  --report-rule: #b36b00;
+  --shadow-card:
+    inset 0 1px 0 rgba(255, 255, 255, 0.035), 0 1px 0 rgba(0, 0, 0, 0.5),
+    0 2px 6px rgba(0, 0, 0, 0.25);
+  --shadow-raised:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 4px 12px rgba(0, 0, 0, 0.45);
+  --shadow-overlay:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 16px 40px rgba(0, 0, 0, 0.6),
+    0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+[data-theme="matrix"] {
+  --canvas: #050907;
+  --surface-100: #0a110d;
+  --surface-200: #0e1812;
+  --surface-300: #14221a;
+  --border: #1a2e22;
+  --border-strong: #3f7a58;
+  --ink: #d4f7e2;
+  --ink-muted: #8fc4a3;
+  --ink-subtle: #7db393;
+  --lens: #d4f7e2;
+  --lens-strong: #ffffff;
+  --lens-soft: #12241a;
+  --on-lens: #050907;
+  --signal: #39e08f;
+  --signal-soft: #0b2a1b;
+  --on-signal: #02140a;
+  --scrim: rgba(0, 6, 3, 0.7);
+  --tooltip-bg: var(--surface-300);
+  --focus-ring: #39e08f;
+  --sev-critical: #ff4d6a;
+  --sev-high: #ff8a3d;
+  --sev-medium: #e9cf4a;
+  --sev-low: #4cc3e0;
+  --sev-info: #8fc4a3;
+  --sev-critical-soft: #35111a;
+  --sev-high-soft: #33190a;
+  --sev-medium-soft: #2c270b;
+  --sev-low-soft: #0b2830;
+  --sev-info-soft: #101d15;
+  --status-ok: #39e08f;
+  --status-ok-soft: #0b2a1e;
+  --status-warn: #e9cf4a;
+  --status-warn-soft: #2c270b;
+  --status-danger: var(--sev-critical);
+  --status-danger-soft: var(--sev-critical-soft);
+  --threat-zeroday: #d98bf2;
+  --threat-zeroday-soft: #2e1838;
+  --threat-kev: var(--sev-critical);
+  --threat-ransomware: var(--sev-high);
+  --chart-1: #39e08f;
+  --chart-2: #6ea2ff;
+  --chart-3: #f5c542;
+  --chart-4: #f28cb8;
+  --chart-5: #a3d977;
+  --chart-6: #8fc4a3;
+  --chart-grid: #122018;
+  --chart-axis: var(--ink-muted);
+  --chart-selected: var(--lens);
+  --heat-0: #0b140f;
+  --heat-1: #132219;
+  --heat-2: #1f3a2a;
+  --heat-3: #2f6a49;
+  --heat-4: #6fcf98;
+  --heat-5: #d4f7e2;
+  --report-slate: #16181c;
+  --report-navy: #132c55;
+  --report-crimson: #7a1426;
+  --on-report: #ffffff;
+  --report-rule: #b36b00;
+  --shadow-card:
+    inset 0 1px 0 rgba(255, 255, 255, 0.035), 0 1px 0 rgba(0, 0, 0, 0.5),
+    0 2px 6px rgba(0, 0, 0, 0.25);
+  --shadow-raised:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 4px 12px rgba(0, 0, 0, 0.45);
+  --shadow-overlay:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 16px 40px rgba(0, 0, 0, 0.6),
+    0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+[data-theme="neon"] {
+  --canvas: #0a0a10;
+  --surface-100: #111118;
+  --surface-200: #171721;
+  --surface-300: #20202d;
+  --border: #29293a;
+  --border-strong: #65657f;
+  --ink: #f1f1f7;
+  --ink-muted: #a9a9bf;
+  --ink-subtle: #9696b0;
+  --lens: #f1f1f7;
+  --lens-strong: #ffffff;
+  --lens-soft: #212130;
+  --on-lens: #0a0a10;
+  --signal: #bbf351;
+  --signal-soft: #1f2a0c;
+  --on-signal: #121a00;
+  --scrim: rgba(3, 6, 9, 0.64);
+  --tooltip-bg: var(--surface-300);
+  --focus-ring: #bbf351;
+  --sev-critical: #ff4d6a;
+  --sev-high: #ff8a3d;
+  --sev-medium: #e9cf4a;
+  --sev-low: #4cc3e0;
+  --sev-info: #a9a9bf;
+  --sev-critical-soft: #35111a;
+  --sev-high-soft: #33190a;
+  --sev-medium-soft: #2c270b;
+  --sev-low-soft: #0b2830;
+  --sev-info-soft: #1b1b27;
+  --status-ok: #3ecf8e;
+  --status-ok-soft: #0b2a1e;
+  --status-warn: #e9cf4a;
+  --status-warn-soft: #2c270b;
+  --status-danger: var(--sev-critical);
+  --status-danger-soft: var(--sev-critical-soft);
+  --threat-zeroday: #d98bf2;
+  --threat-zeroday-soft: #2e1838;
+  --threat-kev: var(--sev-critical);
+  --threat-ransomware: var(--sev-high);
+  --chart-1: #00bcff;
+  --chart-2: #bbf351;
+  --chart-3: #f5c542;
+  --chart-4: #ff6bd6;
+  --chart-5: #a3d977;
+  --chart-6: #a9a9bf;
+  --chart-grid: #1a1a26;
+  --chart-axis: var(--ink-muted);
+  --chart-selected: var(--lens);
+  --heat-0: #121219;
+  --heat-1: #1d1d2a;
+  --heat-2: #2e2e44;
+  --heat-3: #4d4d73;
+  --heat-4: #9d9dc4;
+  --heat-5: #f1f1f7;
+  --report-slate: #16181c;
+  --report-navy: #132c55;
+  --report-crimson: #7a1426;
+  --on-report: #ffffff;
+  --report-rule: #b36b00;
+  --shadow-card:
+    inset 0 1px 0 rgba(255, 255, 255, 0.035), 0 1px 0 rgba(0, 0, 0, 0.5),
+    0 2px 6px rgba(0, 0, 0, 0.25);
+  --shadow-raised:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 4px 12px rgba(0, 0, 0, 0.45);
+  --shadow-overlay:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 16px 40px rgba(0, 0, 0, 0.6),
+    0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+[data-theme="teal"] {
+  --canvas: #0f171e;
+  --surface-100: #141f28;
+  --surface-200: #1a2632;
+  --surface-300: #1c2935;
+  --border: #283847;
+  --border-strong: #5d7488;
+  --ink: #e8edf2;
+  --ink-muted: #a3b2c0;
+  --ink-subtle: #91a2b2;
+  --lens: #e8edf2;
+  --lens-strong: #ffffff;
+  --lens-soft: #1f2e3b;
+  --on-lens: #0f171e;
+  --signal: #2ec4b6;
+  --signal-soft: #0e2b2d;
+  --on-signal: #021a18;
+  --scrim: rgba(3, 6, 9, 0.64);
+  --tooltip-bg: var(--surface-300);
+  --focus-ring: #2ec4b6;
+  --sev-critical: #ff4d6a;
+  --sev-high: #ff8a3d;
+  --sev-medium: #e9cf4a;
+  --sev-low: #4cc3e0;
+  --sev-info: #a3b2c0;
+  --sev-critical-soft: #35111a;
+  --sev-high-soft: #33190a;
+  --sev-medium-soft: #2c270b;
+  --sev-low-soft: #0b2830;
+  --sev-info-soft: #1a2632;
+  --status-ok: #3ecf8e;
+  --status-ok-soft: #0b2a1e;
+  --status-warn: #e9cf4a;
+  --status-warn-soft: #2c270b;
+  --status-danger: var(--sev-critical);
+  --status-danger-soft: var(--sev-critical-soft);
+  --threat-zeroday: #d98bf2;
+  --threat-zeroday-soft: #2e1838;
+  --threat-kev: var(--sev-critical);
+  --threat-ransomware: var(--sev-high);
+  --chart-1: #2ec4b6;
+  --chart-2: #80a1c1;
+  --chart-3: #f5c542;
+  --chart-4: #f28cb8;
+  --chart-5: #a3d977;
+  --chart-6: #a3b2c0;
+  --chart-grid: #1b2733;
+  --chart-axis: var(--ink-muted);
+  --chart-selected: var(--lens);
+  --heat-0: #141f28;
+  --heat-1: #1d2a36;
+  --heat-2: #2c3e4e;
+  --heat-3: #4f6a80;
+  --heat-4: #9bb2c4;
+  --heat-5: #e8edf2;
+  --report-slate: #16181c;
+  --report-navy: #132c55;
+  --report-crimson: #7a1426;
+  --on-report: #ffffff;
+  --report-rule: #b36b00;
+  --shadow-card:
+    inset 0 1px 0 rgba(255, 255, 255, 0.035), 0 1px 0 rgba(0, 0, 0, 0.5),
+    0 2px 6px rgba(0, 0, 0, 0.25);
+  --shadow-raised:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 4px 12px rgba(0, 0, 0, 0.45);
+  --shadow-overlay:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 16px 40px rgba(0, 0, 0, 0.6),
+    0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+[data-theme="paper"] {
+  --canvas: #f4efe4;
+  --surface-100: #fffcf5;
+  --surface-200: #f3ede1;
+  --surface-300: #f2ede2;
+  --border: #ddd4c1;
+  --border-strong: #7c7263;
+  --ink: #1b1712;
+  --ink-muted: #524a40;
+  --ink-subtle: #62594e;
+  --lens: #1b1712;
+  --lens-strong: #000000;
+  --lens-soft: #ebe3d2;
+  --on-lens: #fffcf5;
+  --signal: #a3321c;
+  --signal-soft: #f7e2da;
+  --on-signal: #ffffff;
+  --scrim: rgba(40, 30, 15, 0.38);
+  --tooltip-bg: var(--surface-300);
+  --focus-ring: #a3321c;
+  --sev-critical: #c8173a;
+  --sev-high: #b54a06;
+  --sev-medium: #806000;
+  --sev-low: #0e7490;
+  --sev-info: #524a40;
+  --sev-critical-soft: #fde6ea;
+  --sev-high-soft: #fdeadb;
+  --sev-medium-soft: #f8f0cf;
+  --sev-low-soft: #dcf3f8;
+  --sev-info-soft: #ece5d7;
+  --status-ok: #047857;
+  --status-ok-soft: #dcf5ea;
+  --status-warn: #806000;
+  --status-warn-soft: #f8f0cf;
+  --status-danger: var(--sev-critical);
+  --status-danger-soft: var(--sev-critical-soft);
+  --threat-zeroday: #8a2fb0;
+  --threat-zeroday-soft: #f5e6fb;
+  --threat-kev: var(--sev-critical);
+  --threat-ransomware: var(--sev-high);
+  --chart-1: #1d5fcf;
+  --chart-2: #0f766e;
+  --chart-3: #8a5c00;
+  --chart-4: #b0336e;
+  --chart-5: #4d7a1f;
+  --chart-6: #524a40;
+  --chart-grid: #e7dfcf;
+  --chart-axis: var(--ink-muted);
+  --chart-selected: var(--lens);
+  --heat-0: #f2ecdf;
+  --heat-1: #e3dac7;
+  --heat-2: #c9bda5;
+  --heat-3: #8f8470;
+  --heat-4: #4d453a;
+  --heat-5: #1b1712;
+  --report-slate: #16181c;
+  --report-navy: #132c55;
+  --report-crimson: #7a1426;
+  --on-report: #ffffff;
+  --report-rule: #b36b00;
+  --shadow-card:
+    0 1px 2px rgba(13, 15, 18, 0.06), 0 2px 8px rgba(13, 15, 18, 0.04);
+  --shadow-raised:
+    0 2px 4px rgba(13, 15, 18, 0.06), 0 8px 20px rgba(13, 15, 18, 0.08);
+  --shadow-overlay:
+    0 16px 40px rgba(13, 15, 18, 0.16), 0 2px 8px rgba(13, 15, 18, 0.08);
+}
+
+[data-theme="enterprise"] {
+  --canvas: #eef2f7;
+  --surface-100: #ffffff;
+  --surface-200: #f3f6fa;
+  --surface-300: #e9eef5;
+  --border: #d5dde8;
+  --border-strong: #6b7689;
+  --ink: #0f172a;
+  --ink-muted: #44516a;
+  --ink-subtle: #56627a;
+  --lens: #0f172a;
+  --lens-strong: #000000;
+  --lens-soft: #e2e8f2;
+  --on-lens: #ffffff;
+  --signal: #1d4ed8;
+  --signal-soft: #e3ebfd;
+  --on-signal: #ffffff;
+  --scrim: rgba(15, 26, 36, 0.4);
+  --tooltip-bg: var(--surface-300);
+  --focus-ring: #1d4ed8;
+  --sev-critical: #c8173a;
+  --sev-high: #b54a06;
+  --sev-medium: #806000;
+  --sev-low: #0e7490;
+  --sev-info: #44516a;
+  --sev-critical-soft: #fde6ea;
+  --sev-high-soft: #fdeadb;
+  --sev-medium-soft: #f8f0cf;
+  --sev-low-soft: #dcf3f8;
+  --sev-info-soft: #e6ebf2;
+  --status-ok: #047857;
+  --status-ok-soft: #dcf5ea;
+  --status-warn: #806000;
+  --status-warn-soft: #f8f0cf;
+  --status-danger: var(--sev-critical);
+  --status-danger-soft: var(--sev-critical-soft);
+  --threat-zeroday: #8a2fb0;
+  --threat-zeroday-soft: #f5e6fb;
+  --threat-kev: var(--sev-critical);
+  --threat-ransomware: var(--sev-high);
+  --chart-1: #1d4ed8;
+  --chart-2: #0f766e;
+  --chart-3: #8a5c00;
+  --chart-4: #b0336e;
+  --chart-5: #4d7a1f;
+  --chart-6: #44516a;
+  --chart-grid: #e4e9f0;
+  --chart-axis: var(--ink-muted);
+  --chart-selected: var(--lens);
+  --heat-0: #f0f3f8;
+  --heat-1: #dce3ee;
+  --heat-2: #bcc7d8;
+  --heat-3: #7e8ba3;
+  --heat-4: #3c4760;
+  --heat-5: #0f172a;
+  --report-slate: #16181c;
+  --report-navy: #132c55;
+  --report-crimson: #7a1426;
+  --on-report: #ffffff;
+  --report-rule: #b36b00;
+  --shadow-card:
+    0 1px 2px rgba(13, 15, 18, 0.06), 0 2px 8px rgba(13, 15, 18, 0.04);
+  --shadow-raised:
+    0 2px 4px rgba(13, 15, 18, 0.06), 0 8px 20px rgba(13, 15, 18, 0.08);
+  --shadow-overlay:
+    0 16px 40px rgba(13, 15, 18, 0.16), 0 2px 8px rgba(13, 15, 18, 0.08);
+}
+
+@font-face {
+  font-family: "IBM Plex Sans";
+  src: url("/fonts/IBMPlexSans-Variable.woff2") format("woff2");
+  font-weight: 100 700;
+  font-display: swap;
+}
+@font-face {
+  font-family: "IBM Plex Mono";
+  src: url("/fonts/IBMPlexMono-400.woff2") format("woff2");
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: "IBM Plex Mono";
+  src: url("/fonts/IBMPlexMono-500.woff2") format("woff2");
+  font-weight: 500;
+  font-display: swap;
+}
+@font-face {
+  font-family: "IBM Plex Mono";
+  src: url("/fonts/IBMPlexMono-600.woff2") format("woff2");
+  font-weight: 600;
+  font-display: swap;
+}
+@font-face {
+  font-family: "IBM Plex Sans Condensed";
+  src: url("/fonts/IBMPlexSansCondensed-500.woff2") format("woff2");
+  font-weight: 500;
+  font-display: swap;
+}
+@font-face {
+  font-family: "IBM Plex Sans Condensed";
+  src: url("/fonts/IBMPlexSansCondensed-600.woff2") format("woff2");
+  font-weight: 600;
+  font-display: swap;
+}
+@font-face {
+  font-family: "IBM Plex Sans Condensed";
+  src: url("/fonts/IBMPlexSansCondensed-700.woff2") format("woff2");
+  font-weight: 700;
+  font-display: swap;
+}
+
+@theme inline {
+  --color-*: initial;
+  --color-canvas: var(--canvas);
+  --color-surface-100: var(--surface-100);
+  --color-surface-200: var(--surface-200);
+  --color-surface-300: var(--surface-300);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-ink: var(--ink);
+  --color-ink-muted: var(--ink-muted);
+  --color-ink-subtle: var(--ink-subtle);
+  --color-lens: var(--lens);
+  --color-lens-strong: var(--lens-strong);
+  --color-lens-soft: var(--lens-soft);
+  --color-on-lens: var(--on-lens);
+  --color-signal: var(--signal);
+  --color-signal-soft: var(--signal-soft);
+  --color-on-signal: var(--on-signal);
+  --color-scrim: var(--scrim);
+  --color-tooltip-bg: var(--tooltip-bg);
+  --color-focus-ring: var(--focus-ring);
+  --color-sev-critical: var(--sev-critical);
+  --color-sev-high: var(--sev-high);
+  --color-sev-medium: var(--sev-medium);
+  --color-sev-low: var(--sev-low);
+  --color-sev-info: var(--sev-info);
+  --color-sev-critical-soft: var(--sev-critical-soft);
+  --color-sev-high-soft: var(--sev-high-soft);
+  --color-sev-medium-soft: var(--sev-medium-soft);
+  --color-sev-low-soft: var(--sev-low-soft);
+  --color-sev-info-soft: var(--sev-info-soft);
+  --color-status-ok: var(--status-ok);
+  --color-status-ok-soft: var(--status-ok-soft);
+  --color-status-warn: var(--status-warn);
+  --color-status-warn-soft: var(--status-warn-soft);
+  --color-status-danger: var(--status-danger);
+  --color-status-danger-soft: var(--status-danger-soft);
+  --color-threat-zeroday: var(--threat-zeroday);
+  --color-threat-zeroday-soft: var(--threat-zeroday-soft);
+  --color-threat-kev: var(--threat-kev);
+  --color-threat-ransomware: var(--threat-ransomware);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-chart-6: var(--chart-6);
+  --color-chart-grid: var(--chart-grid);
+  --color-chart-axis: var(--chart-axis);
+  --color-chart-selected: var(--chart-selected);
+  --color-heat-0: var(--heat-0);
+  --color-heat-1: var(--heat-1);
+  --color-heat-2: var(--heat-2);
+  --color-heat-3: var(--heat-3);
+  --color-heat-4: var(--heat-4);
+  --color-heat-5: var(--heat-5);
+  --color-report-slate: var(--report-slate);
+  --color-report-navy: var(--report-navy);
+  --color-report-crimson: var(--report-crimson);
+  --color-on-report: var(--on-report);
+  --color-report-rule: var(--report-rule);
+  --shadow-*: initial;
+  --shadow-card: var(--shadow-card);
+  --shadow-raised: var(--shadow-raised);
+  --shadow-overlay: var(--shadow-overlay);
+}
+
+@theme {
+  --font-sans:
+    "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono:
+    "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --font-display:
+    "IBM Plex Sans Condensed", "IBM Plex Sans", "Arial Narrow", sans-serif;
+  --spacing: 4px; /* space-N = N×4px: p-4 = 16px = space-4 */
+  --radius-*: initial;
+  --radius-sm: 3px;
+  --radius-md: 5px;
+  --radius-lg: 8px;
+  --radius-full: 9999px;
+  --text-kpi: 36px;
+  --text-kpi--line-height: 40px;
+  --text-kpi--font-weight: 600;
+  --text-kpi--letter-spacing: -0.01em;
+  --text-title-lg: 28px;
+  --text-title-lg--line-height: 32px;
+  --text-title-lg--font-weight: 600;
+  --text-title-lg--letter-spacing: -0.005em;
+  --text-title: 18px;
+  --text-title--line-height: 24px;
+  --text-title--font-weight: 600;
+  --text-body: 14px;
+  --text-body--line-height: 22px;
+  --text-body--font-weight: 400;
+  --text-body-sm: 13px;
+  --text-body-sm--line-height: 20px;
+  --text-body-sm--font-weight: 400;
+  --text-body-strong: 13px;
+  --text-body-strong--line-height: 20px;
+  --text-body-strong--font-weight: 500;
+  --text-caption: 12px;
+  --text-caption--line-height: 16px;
+  --text-caption--font-weight: 500;
+  --text-card-title: 11px;
+  --text-card-title--line-height: 16px;
+  --text-card-title--font-weight: 600;
+  --text-card-title--letter-spacing: 0.08em;
+  --text-label: 10.5px;
+  --text-label--line-height: 14px;
+  --text-label--font-weight: 500;
+  --text-label--letter-spacing: 0.1em;
+  --text-mono: 13px;
+  --text-mono--line-height: 20px;
+  --text-mono--font-weight: 400;
+  --text-mono-sm: 12px;
+  --text-mono-sm--line-height: 16px;
+  --text-mono-sm--font-weight: 500;
+  --text-code: 12.5px;
+  --text-code--line-height: 20px;
+  --text-code--font-weight: 400;
+  --breakpoint-*: initial;
+  --breakpoint-sm: 480px;
+  --breakpoint-md: 768px;
+  --breakpoint-lg: 1280px;
+  --breakpoint-xl: 1600px;
+}
+
+:root {
+  --control-sm: 28px;
+  --control-md: 32px;
+  --control-lg: 40px;
+  --nav-height: 48px;
+  --row-height: 36px;
+  --row-height-compact: 28px;
+  --row-height-comfortable: 40px;
+  --drawer-width: 480px;
+  --modal-width: 640px;
+  --z-grid: 1;
+  --z-sticky: 10;
+  --z-drag: 20;
+  --z-drawer: 40;
+  --z-modal: 50;
+  --z-toast: 60;
+  --z-tooltip: 70;
+  --opacity-dimmed: 0.4;
+  --opacity-disabled: 0.45;
+  --opacity-heat-min: 0.14;
+}
+
+[data-density="compact"] {
+  --row-height: var(--row-height-compact);
+}
+[data-density="comfortable"] {
+  --row-height: var(--row-height-comfortable);
+}
+
+@layer base {
+  html {
+    background: var(--canvas);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-size: 13px;
+  }
+  :focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    ::before,
+    ::after {
+      animation-duration: 1ms !important;
+      transition-duration: 1ms !important;
+    }
+  }
+}

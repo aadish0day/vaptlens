@@ -1,0 +1,76 @@
+<!-- @dsCard group="Layout" height=200 -->
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>WidgetCard — preview</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 16px;
+        background: var(--canvas);
+        color: var(--ink);
+        font-family: var(--font-sans);
+      }
+      .row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        align-items: center;
+      }
+      .col {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+      var V = window.VAPTLens,
+        h = React.createElement;
+      function R(el) {
+        ReactDOM.createRoot(document.getElementById("root")).render(el);
+      }
+      R(
+        h(
+          "div",
+          { style: { maxWidth: "420px" } },
+          h(
+            V.WidgetCard,
+            {
+              title: "Top hosts by risk",
+              actions: h(
+                V.Button,
+                { variant: "ghost", size: "sm" },
+                "View all",
+              ),
+            },
+            h(
+              "div",
+              { className: "col" },
+              h(V.RiskMeter, {
+                host: "10.100.1.10",
+                score: 184,
+                max: 200,
+                criticals: 3,
+              }),
+              h(V.RiskMeter, {
+                host: "10.100.2.12",
+                score: 121,
+                max: 200,
+                criticals: 1,
+              }),
+              h(V.RiskMeter, {
+                host: "app.internal.corp",
+                score: 58,
+                max: 200,
+              }),
+            ),
+          ),
+        ),
+      );
+    </script>
+  </body>
+</html>

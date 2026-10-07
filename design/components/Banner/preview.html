@@ -1,0 +1,72 @@
+<!-- @dsCard group="Feedback" height=200 -->
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Banner — preview</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 16px;
+        background: var(--canvas);
+        color: var(--ink);
+        font-family: var(--font-sans);
+        font-size: 13px;
+      }
+      .row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        align-items: center;
+      }
+      .col {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+      var V = window.VAPTLens,
+        h = React.createElement;
+      function R(el) {
+        ReactDOM.createRoot(document.getElementById("root")).render(el);
+      }
+      R(
+        h(
+          "div",
+          { className: "col", style: { maxWidth: "640px" } },
+          h(
+            V.Banner,
+            {
+              tone: "privacy",
+              title: "Everything runs in your browser",
+              onClose: function () {},
+            },
+            "Scan files, hostnames and findings never leave this machine. Nothing is uploaded.",
+          ),
+          h(
+            V.Banner,
+            {
+              tone: "warn",
+              title: "12 rows skipped",
+              action: h(
+                V.Button,
+                { size: "sm", variant: "ghost" },
+                "View rows",
+              ),
+            },
+            "They had no host value after mapping.",
+          ),
+          h(
+            V.Banner,
+            { tone: "danger", title: "Trend Over Time needs 2 dated scans" },
+            "Load another scan batch with a scan date.",
+          ),
+        ),
+      );
+    </script>
+  </body>
+</html>

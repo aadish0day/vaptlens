@@ -1,0 +1,39 @@
+<!-- @dsCard group="Workflow" height=96 -->
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>PipelineStepper — preview</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 16px;
+        background: var(--canvas);
+        color: var(--ink);
+        font-family: var(--font-sans);
+      }
+      .row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        align-items: center;
+      }
+      .col {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+      var V = window.VAPTLens,
+        h = React.createElement;
+      function R(el) {
+        ReactDOM.createRoot(document.getElementById("root")).render(el);
+      }
+      R(h(V.PipelineStepper, { counts: [7, 5, 6, 3, 13], current: 2 }));
+    </script>
+  </body>
+</html>

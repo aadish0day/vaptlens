@@ -1,0 +1,63 @@
+<!-- @dsCard group="Workflow" height=160 -->
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>AuditLogRow — preview</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 16px;
+        background: var(--canvas);
+        color: var(--ink);
+        font-family: var(--font-sans);
+      }
+      .row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        align-items: center;
+      }
+      .col {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+      var V = window.VAPTLens,
+        h = React.createElement;
+      function R(el) {
+        ReactDOM.createRoot(document.getElementById("root")).render(el);
+      }
+      R(
+        h(
+          "div",
+          { style: { maxWidth: "480px" } },
+          h(V.AuditLogRow, {
+            action: "ASSIGN",
+            detail: "MySQL Default Root Password → Database DBAs (Responsible)",
+            role: "Administrator",
+            at: "2026-07-01T09:02:00Z",
+            time: "2026-07-01 14:32",
+          }),
+          h(V.AuditLogRow, {
+            action: "TICKET",
+            detail: "SEC-0142 raised for Apache Tomcat RCE",
+            role: "Remediation Lead",
+            time: "2026-07-01 14:40",
+          }),
+          h(V.AuditLogRow, {
+            action: "PATCH",
+            detail: "Missing HSTS Header moved to Pending Verification",
+            role: "Remediation Lead",
+            time: "2026-07-02 10:14",
+          }),
+        ),
+      );
+    </script>
+  </body>
+</html>

@@ -1,0 +1,290 @@
+{
+  "v": 3,
+  "assetGroups": {
+    "Icons": {
+      "files": {
+        "bug.svg": {
+          "blob": "5e2fa6fae95e7f97e69d67c4e04bdb27",
+          "name": "bug.svg",
+          "size": 638,
+          "type": "image/svg+xml"
+        },
+        "chevron-left.svg": {
+          "blob": "ea1465bf8c26da28b642c95d680097d5",
+          "name": "chevron-left.svg",
+          "size": 270,
+          "type": "image/svg+xml"
+        },
+        "chevron-right.svg": {
+          "blob": "5e20e3c39a8bdf52a694b705aa5edb7d",
+          "name": "chevron-right.svg",
+          "size": 270,
+          "type": "image/svg+xml"
+        },
+        "clock-alert.svg": {
+          "blob": "48deedd76a5d80f0c6164f32e8ba1138",
+          "name": "clock-alert.svg",
+          "size": 363,
+          "type": "image/svg+xml"
+        },
+        "database.svg": {
+          "blob": "848862566b5571ddee513855442ba6cb",
+          "name": "database.svg",
+          "size": 357,
+          "type": "image/svg+xml"
+        },
+        "download.svg": {
+          "blob": "294eb2646d2c7cfd5971c6fe273217ed",
+          "name": "download.svg",
+          "size": 346,
+          "type": "image/svg+xml"
+        },
+        "file-text.svg": {
+          "blob": "6c0c3914c37bb408c721f43a8b9bf14c",
+          "name": "file-text.svg",
+          "size": 473,
+          "type": "image/svg+xml"
+        },
+        "filter.svg": {
+          "blob": "fa31de6fefcc37549cc5ae4c12cb4180",
+          "name": "filter.svg",
+          "size": 396,
+          "type": "image/svg+xml"
+        },
+        "flame.svg": {
+          "blob": "f51f1c6a0029f5537725d8afe96de6bf",
+          "name": "flame.svg",
+          "size": 339,
+          "type": "image/svg+xml"
+        },
+        "git-compare.svg": {
+          "blob": "2bece870fc094c99122e9a1081f6c079",
+          "name": "git-compare.svg",
+          "size": 386,
+          "type": "image/svg+xml"
+        },
+        "globe.svg": {
+          "blob": "1154d3adfe25e9273763ca8179f7a5ef",
+          "name": "globe.svg",
+          "size": 356,
+          "type": "image/svg+xml"
+        },
+        "grid-2x2.svg": {
+          "blob": "2310d93660586995599bfa56113149f4",
+          "name": "grid-2x2.svg",
+          "size": 337,
+          "type": "image/svg+xml"
+        },
+        "grip-vertical.svg": {
+          "blob": "0032d33d1de8f828338b7874bb120f9a",
+          "name": "grip-vertical.svg",
+          "size": 446,
+          "type": "image/svg+xml"
+        },
+        "kanban.svg": {
+          "blob": "62d3efe29b0d03dea736957220cd36e7",
+          "name": "kanban.svg",
+          "size": 304,
+          "type": "image/svg+xml"
+        },
+        "layout-dashboard.svg": {
+          "blob": "dd73b73dc587a616f7096b65ce687609",
+          "name": "layout-dashboard.svg",
+          "size": 452,
+          "type": "image/svg+xml"
+        },
+        "list-checks.svg": {
+          "blob": "176dd1b33aede38179a414d67b1ad078",
+          "name": "list-checks.svg",
+          "size": 367,
+          "type": "image/svg+xml"
+        },
+        "lock.svg": {
+          "blob": "cb74b14c97a110b3b6e0e87b88f48491",
+          "name": "lock.svg",
+          "size": 333,
+          "type": "image/svg+xml"
+        },
+        "network.svg": {
+          "blob": "48f955bbd24e5ce2c9491ebe04b8952c",
+          "name": "network.svg",
+          "size": 472,
+          "type": "image/svg+xml"
+        },
+        "search.svg": {
+          "blob": "ded3b7159c380d01e801da570e8eb0e1",
+          "name": "search.svg",
+          "size": 301,
+          "type": "image/svg+xml"
+        },
+        "server.svg": {
+          "blob": "5e40977dfa50bae73273d95688c94b94",
+          "name": "server.svg",
+          "size": 439,
+          "type": "image/svg+xml"
+        },
+        "shield-alert.svg": {
+          "blob": "68d27aac1c471cc3ae256ee0bb7aa67b",
+          "name": "shield-alert.svg",
+          "size": 467,
+          "type": "image/svg+xml"
+        },
+        "skull.svg": {
+          "blob": "84214848bc1017c0d75799c2dd1fdfcb",
+          "name": "skull.svg",
+          "size": 448,
+          "type": "image/svg+xml"
+        },
+        "ticket.svg": {
+          "blob": "7ae638852a161ba832f50c41c436884c",
+          "name": "ticket.svg",
+          "size": 422,
+          "type": "image/svg+xml"
+        },
+        "upload.svg": {
+          "blob": "762653aa2022a391c33a87835f8de10f",
+          "name": "upload.svg",
+          "size": 344,
+          "type": "image/svg+xml"
+        },
+        "x.svg": {
+          "blob": "fee33a67a265e40a48bbfcc4ea0c5b6f",
+          "name": "x.svg",
+          "size": 281,
+          "type": "image/svg+xml"
+        },
+        "zap.svg": {
+          "blob": "9bea86f9a36dfe0c303ef6a00457d5da",
+          "name": "zap.svg",
+          "size": 413,
+          "type": "image/svg+xml"
+        }
+      },
+      "name": "Icons",
+      "order": [
+        "layout-dashboard.svg",
+        "server.svg",
+        "list-checks.svg",
+        "grid-2x2.svg",
+        "kanban.svg",
+        "network.svg",
+        "git-compare.svg",
+        "file-text.svg",
+        "shield-alert.svg",
+        "flame.svg",
+        "skull.svg",
+        "zap.svg",
+        "clock-alert.svg",
+        "bug.svg",
+        "ticket.svg",
+        "filter.svg",
+        "search.svg",
+        "upload.svg",
+        "download.svg",
+        "database.svg",
+        "globe.svg",
+        "lock.svg",
+        "grip-vertical.svg",
+        "x.svg",
+        "chevron-left.svg",
+        "chevron-right.svg"
+      ],
+      "tile": "xs"
+    },
+    "Logos": {
+      "files": {
+        "vaptlens-app-icon.svg": {
+          "blob": "913a98ff3b994c998ae6c7bcd3439d03",
+          "name": "vaptlens-app-icon.svg",
+          "size": 432,
+          "type": "image/svg+xml"
+        },
+        "vaptlens-mark-dark.svg": {
+          "blob": "5b4a316e011661ad0a9963b6c619cb19",
+          "name": "vaptlens-mark-dark.svg",
+          "size": 329,
+          "type": "image/svg+xml"
+        },
+        "vaptlens-mark-light.svg": {
+          "blob": "eed91561c6cc644648d07ea64fa79a08",
+          "name": "vaptlens-mark-light.svg",
+          "size": 329,
+          "type": "image/svg+xml"
+        }
+      },
+      "name": "Logos",
+      "order": [
+        "vaptlens-mark-dark.svg",
+        "vaptlens-mark-light.svg",
+        "vaptlens-app-icon.svg"
+      ],
+      "tile": "l"
+    },
+    "Logo-options": {
+      "name": "Logo-options",
+      "tile": "m",
+      "order": [
+        "option-a-reticle.svg",
+        "option-b-aperture.svg",
+        "option-c-lens-chart.svg",
+        "option-d-shield-lens.svg"
+      ],
+      "files": {
+        "option-a-reticle.svg": {
+          "name": "option-a-reticle.svg",
+          "blob": "876fc7a7cc01fd45d89f8e660b88d55f",
+          "size": 432,
+          "type": "image/svg+xml"
+        },
+        "option-b-aperture.svg": {
+          "name": "option-b-aperture.svg",
+          "blob": "93ed1aef50a0d0feaa0de77e0ffd7656",
+          "size": 631,
+          "type": "image/svg+xml"
+        },
+        "option-c-lens-chart.svg": {
+          "name": "option-c-lens-chart.svg",
+          "blob": "eb61021e75c043656b71d1f01bf5d7f0",
+          "size": 460,
+          "type": "image/svg+xml"
+        },
+        "option-d-shield-lens.svg": {
+          "name": "option-d-shield-lens.svg",
+          "blob": "550c0ee2e159cfd30486cd4363231a97",
+          "size": 457,
+          "type": "image/svg+xml"
+        }
+      }
+    }
+  },
+  "blobs": {},
+  "createdOnFiles": {
+    "at": "2026-09-25T08:27:56Z",
+    "v": 1
+  },
+  "docs": {
+    "readme": "project/README.md",
+    "sections": []
+  },
+  "groups": ["Logos", "Logo-options", "Icons"],
+  "lastChange": {
+    "by": "Aadish",
+    "at": "2026-10-03T14:00:00Z",
+    "via": "Claude (Cowork)",
+    "note": "VulnTable: header aria-sort now reports the real direction (CVSS, severity and numeric columns sort highest first) and each header explains its sort on hover."
+  },
+  "layout": "files",
+  "libraries": [
+    {
+      "name": "react",
+      "version": "18"
+    },
+    {
+      "name": "react-dom",
+      "version": "18"
+    }
+  ],
+  "namespace": "VAPTLens",
+  "sections": {},
+  "title": "VAPTLens"
+}

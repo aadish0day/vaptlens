@@ -1,0 +1,55 @@
+<!-- @dsCard group="Charts" height=280 -->
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>BarChart — preview</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 16px;
+        background: var(--canvas);
+        color: var(--ink);
+        font-family: var(--font-sans);
+      }
+      .row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        align-items: center;
+      }
+      .col {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+      var V = window.VAPTLens,
+        h = React.createElement;
+      function R(el) {
+        ReactDOM.createRoot(document.getElementById("root")).render(el);
+      }
+      R(
+        h(
+          "div",
+          { style: { maxWidth: "480px" } },
+          h(V.BarChart, {
+            label: "Findings by severity",
+            selected: "High",
+            data: [
+              { label: "Critical", value: 12, severity: "critical" },
+              { label: "High", value: 31, severity: "high" },
+              { label: "Medium", value: 58, severity: "medium" },
+              { label: "Low", value: 22, severity: "low" },
+              { label: "Info", value: 40, severity: "info" },
+            ],
+          }),
+        ),
+      );
+    </script>
+  </body>
+</html>

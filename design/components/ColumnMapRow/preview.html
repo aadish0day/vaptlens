@@ -1,0 +1,68 @@
+<!-- @dsCard group="Ingestion" height=200 -->
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>ColumnMapRow — preview</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 16px;
+        background: var(--canvas);
+        color: var(--ink);
+        font-family: var(--font-sans);
+        font-size: 13px;
+      }
+      .row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        align-items: center;
+      }
+      .col {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+      var V = window.VAPTLens,
+        h = React.createElement;
+      function R(el) {
+        ReactDOM.createRoot(document.getElementById("root")).render(el);
+      }
+      var H = [
+        "Target IP",
+        "Risk Level",
+        "Score",
+        "Vulnerability",
+        "Remediation",
+      ];
+      R(
+        h(
+          "div",
+          { style: { maxWidth: "640px" } },
+          h(V.ColumnMapRow, {
+            field: "host",
+            required: true,
+            header: "Target IP",
+            sample: "10.100.1.25",
+            options: H,
+          }),
+          h(V.ColumnMapRow, {
+            field: "severity",
+            required: true,
+            header: "Risk Level",
+            sample: "High",
+            options: H,
+          }),
+          h(V.ColumnMapRow, { field: "name", required: true, options: H }),
+          h(V.ColumnMapRow, { field: "solution", options: H }),
+        ),
+      );
+    </script>
+  </body>
+</html>

@@ -1,0 +1,58 @@
+<!-- @dsCard group="Charts" height=64 -->
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Sparkline — preview</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 16px;
+        background: var(--canvas);
+        color: var(--ink);
+        font-family: var(--font-sans);
+        font-size: 13px;
+      }
+      .row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        align-items: center;
+      }
+      .col {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+      var V = window.VAPTLens,
+        h = React.createElement;
+      function R(el) {
+        ReactDOM.createRoot(document.getElementById("root")).render(el);
+      }
+      R(
+        h(
+          "div",
+          { className: "row", style: { gap: "32px" } },
+          h(
+            "span",
+            { className: "row", style: { gap: "8px" } },
+            h(V.Sparkline, { values: [42, 38, 40, 31, 27, 22], tone: "ok" }),
+            "22 open",
+          ),
+          h(
+            "span",
+            { className: "row", style: { gap: "8px" } },
+            h(V.Sparkline, { values: [2, 3, 3, 5, 8, 12], tone: "danger" }),
+            "12 critical",
+          ),
+          h(V.Sparkline, { values: [10, 12, 9, 14, 13, 15] }),
+        ),
+      );
+    </script>
+  </body>
+</html>

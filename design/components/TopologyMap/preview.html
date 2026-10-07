@@ -1,0 +1,79 @@
+<!-- @dsCard group="Charts" height=520 -->
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>TopologyMap — preview</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 16px;
+        background: var(--canvas);
+        color: var(--ink);
+        font-family: var(--font-sans);
+        font-size: 13px;
+      }
+      .row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        align-items: center;
+      }
+      .col {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+      var V = window.VAPTLens,
+        h = React.createElement;
+      function R(el) {
+        ReactDOM.createRoot(document.getElementById("root")).render(el);
+      }
+      R(
+        h(
+          "div",
+          { style: { maxWidth: "640px" } },
+          h(V.TopologyMap, {
+            selected: "10.100.1.10",
+            subnets: [
+              {
+                name: "10.100.1.0/24",
+                hosts: [
+                  { ip: "10.100.1.10", count: 12, severity: "critical" },
+                  { ip: "10.100.1.25", count: 7, severity: "critical" },
+                  { ip: "10.100.1.40", count: 2, severity: "medium" },
+                ],
+              },
+              {
+                name: "10.100.2.0/24",
+                hosts: [
+                  { ip: "10.100.2.12", count: 7, severity: "critical" },
+                  { ip: "10.100.2.30", count: 3, severity: "low" },
+                ],
+              },
+              {
+                name: "10.100.3.0/24",
+                hosts: [
+                  { ip: "10.100.3.5", count: 4, severity: "high" },
+                  { ip: "10.100.3.9", count: 1, severity: "info" },
+                ],
+              },
+              {
+                name: "External",
+                hosts: [
+                  { ip: "app.internal.corp", count: 14, severity: "high" },
+                  { ip: "vpn.corp.com", count: 2, severity: "medium" },
+                ],
+              },
+            ],
+          }),
+        ),
+      );
+    </script>
+  </body>
+</html>

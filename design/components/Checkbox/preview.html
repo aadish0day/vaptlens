@@ -1,0 +1,63 @@
+<!-- @dsCard group="Filtering" height=150 -->
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Checkbox — preview</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 16px;
+        background: var(--canvas);
+        color: var(--ink);
+        font-family: var(--font-sans);
+      }
+      .row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        align-items: center;
+      }
+      .col {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+      var V = window.VAPTLens,
+        h = React.createElement;
+      function R(el) {
+        ReactDOM.createRoot(document.getElementById("root")).render(el);
+      }
+      R(
+        h(
+          "div",
+          { className: "col", style: { maxWidth: "260px", gap: "2px" } },
+          h(V.Checkbox, {
+            label: "Critical",
+            severity: "critical",
+            count: 12,
+            defaultChecked: true,
+          }),
+          h(V.Checkbox, {
+            label: "High",
+            severity: "high",
+            count: 31,
+            defaultChecked: true,
+          }),
+          h(V.Checkbox, { label: "Medium", severity: "medium", count: 58 }),
+          h(V.Checkbox, {
+            label: "All tools",
+            indeterminate: true,
+            checked: true,
+          }),
+          h(V.Checkbox, { label: "Wapiti", count: 0, disabled: true }),
+        ),
+      );
+    </script>
+  </body>
+</html>

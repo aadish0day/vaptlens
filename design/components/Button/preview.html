@@ -1,0 +1,69 @@
+<!-- @dsCard group="Actions" height=120 -->
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Button — preview</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 16px;
+        background: var(--canvas);
+        color: var(--ink);
+        font-family: var(--font-sans);
+      }
+      .row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        align-items: center;
+      }
+      .col {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+      var V = window.VAPTLens,
+        h = React.createElement;
+      function R(el) {
+        ReactDOM.createRoot(document.getElementById("root")).render(el);
+      }
+      R(
+        h(
+          "div",
+          { className: "col" },
+          h(
+            "div",
+            { className: "row" },
+            h(V.Button, { variant: "primary", icon: "shield" }, "Upload scan"),
+            h(V.Button, null, "Export PDF"),
+            h(V.Button, { variant: "ghost", size: "sm" }, "Clear all"),
+            h(V.Button, { variant: "danger", size: "sm" }, "Remediate all"),
+          ),
+          h(
+            "div",
+            { className: "row" },
+            h(
+              V.Button,
+              {
+                restricted: true,
+                restrictedReason: "Security Auditors have read-only access.",
+              },
+              "Raise ticket",
+            ),
+            h(
+              V.Button,
+              { variant: "primary", size: "lg" },
+              "Load demo scan data",
+            ),
+          ),
+        ),
+      );
+    </script>
+  </body>
+</html>

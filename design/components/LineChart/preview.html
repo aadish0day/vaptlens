@@ -1,0 +1,86 @@
+<!-- @dsCard group="Charts" height=300 -->
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>LineChart — preview</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 16px;
+        background: var(--canvas);
+        color: var(--ink);
+        font-family: var(--font-sans);
+        font-size: 13px;
+      }
+      .row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        align-items: center;
+      }
+      .col {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+      var V = window.VAPTLens,
+        h = React.createElement;
+      function R(el) {
+        ReactDOM.createRoot(document.getElementById("root")).render(el);
+      }
+      var L = ["Nov 2025", "Feb 2026", "Jul 2026"];
+      R(
+        h(
+          "div",
+          { className: "row", style: { alignItems: "flex-start" } },
+          h(
+            "div",
+            { style: { flex: 1, minWidth: "300px" } },
+            h(V.LineChart, {
+              labels: L,
+              series: [
+                {
+                  label: "CISA KEV",
+                  values: [2, 3, 5],
+                  color: "var(--threat-kev)",
+                },
+                {
+                  label: "Zero-day",
+                  values: [0, 0, 1],
+                  color: "var(--threat-zeroday)",
+                },
+                {
+                  label: "Ransomware",
+                  values: [3, 3, 4],
+                  color: "var(--threat-ransomware)",
+                  dashed: true,
+                },
+                {
+                  label: "Exploitable",
+                  values: [4, 6, 11],
+                  color: "var(--chart-2)",
+                },
+              ],
+            }),
+          ),
+          h(
+            "div",
+            { style: { flex: 1, minWidth: "300px" } },
+            h(V.LineChart, {
+              id: "a",
+              area: true,
+              labels: L,
+              series: [{ label: "Active findings", values: [6, 13, 22] }],
+            }),
+          ),
+        ),
+      );
+    </script>
+  </body>
+</html>

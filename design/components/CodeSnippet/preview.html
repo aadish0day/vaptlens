@@ -1,0 +1,57 @@
+<!-- @dsCard group="Data display" height=200 -->
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>CodeSnippet — preview</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 16px;
+        background: var(--canvas);
+        color: var(--ink);
+        font-family: var(--font-sans);
+      }
+      .row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        align-items: center;
+      }
+      .col {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+      var V = window.VAPTLens,
+        h = React.createElement;
+      function R(el) {
+        ReactDOM.createRoot(document.getElementById("root")).render(el);
+      }
+      R(
+        h(
+          "div",
+          { style: { maxWidth: "560px" } },
+          h(V.CodeSnippet, {
+            title: "Remediation",
+            tabs: [
+              {
+                label: "Nginx",
+                code: "ssl_protocols TLSv1.2 TLSv1.3;\nssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256;\nssl_prefer_server_ciphers on;",
+              },
+              {
+                label: "PowerShell",
+                code: "Disable-WindowsOptionalFeature -Online -FeatureName SMB1Protocol -NoRestart",
+              },
+            ],
+          }),
+        ),
+      );
+    </script>
+  </body>
+</html>

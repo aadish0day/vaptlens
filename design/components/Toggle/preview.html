@@ -1,0 +1,54 @@
+<!-- @dsCard group="Filtering" height=72 -->
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Toggle — preview</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 16px;
+        background: var(--canvas);
+        color: var(--ink);
+        font-family: var(--font-sans);
+      }
+      .row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        align-items: center;
+      }
+      .col {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+      var V = window.VAPTLens,
+        h = React.createElement;
+      function R(el) {
+        ReactDOM.createRoot(document.getElementById("root")).render(el);
+      }
+      R(
+        h(
+          "div",
+          { className: "row" },
+          h(V.Toggle, {
+            label: "CISA KEV",
+            icon: "flame",
+            count: 4,
+            defaultChecked: true,
+          }),
+          h(V.Toggle, { label: "Ransomware", icon: "skull", count: 6 }),
+          h(V.Toggle, { label: "0-Day", icon: "zap", count: 1 }),
+          h(V.Toggle, { label: "EOL", icon: "clock", count: 3 }),
+          h(V.Toggle, { label: "> 6 months", count: 9 }),
+        ),
+      );
+    </script>
+  </body>
+</html>

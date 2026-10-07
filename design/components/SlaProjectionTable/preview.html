@@ -1,0 +1,73 @@
+<!-- @dsCard group="Governance" height=260 -->
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>SlaProjectionTable — preview</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 16px;
+        background: var(--canvas);
+        color: var(--ink);
+        font-family: var(--font-sans);
+        font-size: 13px;
+      }
+      .row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        align-items: center;
+      }
+      .col {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+      var V = window.VAPTLens,
+        h = React.createElement;
+      function R(el) {
+        ReactDOM.createRoot(document.getElementById("root")).render(el);
+      }
+      R(
+        h(V.SlaProjectionTable, {
+          rows: [
+            {
+              severity: "critical",
+              active: 12,
+              breached: 3,
+              atRisk: 4,
+              avgDays: -6,
+            },
+            {
+              severity: "high",
+              active: 31,
+              breached: 8,
+              atRisk: 5,
+              avgDays: 11,
+            },
+            {
+              severity: "medium",
+              active: 58,
+              breached: 14,
+              atRisk: 2,
+              avgDays: 37,
+            },
+            {
+              severity: "low",
+              active: 22,
+              breached: 6,
+              atRisk: 0,
+              avgDays: 102,
+            },
+          ],
+        }),
+      );
+    </script>
+  </body>
+</html>

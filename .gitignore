@@ -1,6 +1,13 @@
-node_modules
-dist
-*.tsbuildinfo
+node_modules/
+dist/
+*.log
 .DS_Store
-*.local
-.gstack/
+.env*
+!.env.example
+
+# design-sync (staged converter, build output, machine state)
+/.ds-sync/
+/ds-bundle/
+/.design-sync/.cache/
+/.design-sync/learnings/
+/.design-sync/node_modules

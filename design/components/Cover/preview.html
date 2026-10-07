@@ -1,0 +1,168 @@
+<!-- @dsCard height=288 -->
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>VAPTLens</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+      }
+      body {
+        background: var(--canvas);
+        color: var(--ink);
+        font-family: var(--font-sans);
+        overflow: hidden;
+      }
+      .cover {
+        position: relative;
+        width: 960px;
+        height: 288px;
+        overflow: hidden;
+      }
+      .art {
+        position: absolute;
+        top: 0;
+        left: 480px;
+        width: 480px;
+        height: 288px;
+        overflow: hidden;
+      }
+      .art svg {
+        display: block;
+        width: 480px;
+        height: 288px;
+      }
+      .lens {
+        fill: var(--signal);
+      }
+      .slate {
+        fill: var(--border-strong);
+      }
+      .crit {
+        fill: var(--sev-critical);
+      }
+      .high {
+        fill: var(--sev-high);
+      }
+      .med {
+        fill: var(--sev-medium);
+      }
+      .blk {
+        rx: var(--radius-lg);
+      }
+      .chip {
+        rx: var(--radius-sm);
+      }
+      .arc {
+        fill: none;
+        stroke: var(--signal);
+        stroke-width: 2;
+      }
+      [data-theme="light"] .arc {
+        stroke: var(--surface-100);
+      }
+      .cut {
+        fill: none;
+        stroke: var(--canvas);
+        stroke-width: 6;
+        stroke-linecap: round;
+      }
+      .cutdot {
+        fill: var(--canvas);
+      }
+      .words {
+        position: absolute;
+        left: var(--space-6);
+        bottom: var(--space-6);
+        max-width: 440px;
+      }
+      .name {
+        margin: 0;
+        font-size: 88px;
+        line-height: 0.92;
+        font-weight: 600;
+        letter-spacing: -0.025em;
+        color: var(--ink);
+      }
+      .name span {
+        color: var(--signal);
+      }
+      .tag {
+        margin: var(--space-2) 0 0 4px;
+        font-size: 14px;
+        line-height: 20px;
+        color: var(--ink-muted);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="cover">
+      <div class="art" aria-hidden="true">
+        <svg viewBox="0 0 480 288" width="480" height="288">
+          <!--
+  blocks      signal 176×256 slab bled off the top (the brand, largest) · border-strong slate 288×176 bled off the right (the neutral instrument panel) · severity ramp sev-critical 96×32, sev-high 64×32, sev-medium 48×32 (state colours kept small) ≈ 30% of 960×288
+  arrangement one tall lens slab with a slate satellite, bottoms on one line space-12 above the edge, space-4 gutters; the severity ramp steps down in width like the Critical→Info order
+  pattern     literal motif "lens": concentric signal arcs at a space-8 pitch radiating from the slate block's corner, and the logo reticle cut out of the slab in the ground colour
+  scales      sides in space-4 multiples; gutters space-4; arc pitch space-8; corners radius-lg on blocks, radius-sm on the ramp chips
+-->
+          <defs>
+            <clipPath id="slateclip">
+              <rect x="208" y="64" width="288" height="176" rx="10" />
+            </clipPath>
+          </defs>
+          <rect
+            class="lens blk"
+            x="16"
+            y="-16"
+            width="176"
+            height="256"
+            rx="10"
+          />
+          <circle class="cut" cx="104" cy="120" r="44" />
+          <circle class="cutdot" cx="104" cy="120" r="14" />
+          <path class="cut" d="M104 48v18M104 174v18M32 120h18M158 120h18" />
+          <rect
+            class="slate blk"
+            x="208"
+            y="64"
+            width="288"
+            height="176"
+            rx="10"
+          />
+          <g clip-path="url(#slateclip)">
+            <circle class="arc" cx="208" cy="240" r="32" />
+            <circle class="arc" cx="208" cy="240" r="64" />
+            <circle class="arc" cx="208" cy="240" r="96" />
+            <circle class="arc" cx="208" cy="240" r="128" />
+            <circle class="arc" cx="208" cy="240" r="160" />
+            <circle class="arc" cx="208" cy="240" r="192" />
+          </g>
+          <rect
+            class="crit chip"
+            x="208"
+            y="16"
+            width="96"
+            height="32"
+            rx="4"
+          />
+          <rect
+            class="high chip"
+            x="320"
+            y="16"
+            width="64"
+            height="32"
+            rx="4"
+          />
+          <rect class="med chip" x="400" y="16" width="48" height="32" rx="4" />
+        </svg>
+      </div>
+      <div class="words">
+        <h1 class="name">VAPT<span>Lens</span></h1>
+        <p class="tag">Scan analytics that never leave your browser.</p>
+      </div>
+    </div>
+  </body>
+</html>

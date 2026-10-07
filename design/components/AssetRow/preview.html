@@ -1,0 +1,82 @@
+<!-- @dsCard group="Data display" height=240 -->
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>AssetRow — preview</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 16px;
+        background: var(--canvas);
+        color: var(--ink);
+        font-family: var(--font-sans);
+        font-size: 13px;
+      }
+      .row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        align-items: center;
+      }
+      .col {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+      var V = window.VAPTLens,
+        h = React.createElement;
+      function R(el) {
+        ReactDOM.createRoot(document.getElementById("root")).render(el);
+      }
+      R(
+        h(
+          "div",
+          {
+            style: {
+              border: "1px solid var(--border)",
+              borderRadius: "10px",
+              overflow: "hidden",
+            },
+          },
+          h(V.AssetRow, {
+            host: "10.100.1.10",
+            device: "Web Server",
+            os: "Linux",
+            eol: true,
+            tier: 1,
+            owner: "Server Team",
+            counts: { critical: 3, high: 2, medium: 4 },
+            score: 184,
+            onClick: function () {},
+          }),
+          h(V.AssetRow, {
+            host: "10.100.2.12",
+            device: "Database",
+            os: "Linux",
+            tier: 1,
+            owner: "Database DBAs",
+            counts: { critical: 1, high: 1, medium: 2 },
+            score: 121,
+            onClick: function () {},
+          }),
+          h(V.AssetRow, {
+            host: "dc01.corp.local",
+            device: "Domain Controller",
+            os: "Windows",
+            tier: 2,
+            owner: "Server Team",
+            counts: { high: 2, medium: 1 },
+            score: 64,
+            onClick: function () {},
+          }),
+        ),
+      );
+    </script>
+  </body>
+</html>

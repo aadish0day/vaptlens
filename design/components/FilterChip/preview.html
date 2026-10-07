@@ -1,0 +1,53 @@
+<!-- @dsCard group="Filtering" height=64 -->
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>FilterChip — preview</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 16px;
+        background: var(--canvas);
+        color: var(--ink);
+        font-family: var(--font-sans);
+      }
+      .row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        align-items: center;
+      }
+      .col {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+      var V = window.VAPTLens,
+        h = React.createElement;
+      function R(el) {
+        ReactDOM.createRoot(document.getElementById("root")).render(el);
+      }
+      R(
+        h(
+          "div",
+          { className: "row" },
+          h(V.FilterChip, {
+            field: "Severity",
+            value: "Critical",
+            severity: "critical",
+          }),
+          h(V.FilterChip, { field: "Host", value: "10.100.1.25" }),
+          h(V.FilterChip, { field: "Tool", value: "Nessus" }),
+          h(V.FilterChip, { value: "CISA KEV" }),
+          h(V.Button, { variant: "ghost", size: "sm" }, "Clear all"),
+        ),
+      );
+    </script>
+  </body>
+</html>

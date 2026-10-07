@@ -1,0 +1,83 @@
+<!-- @dsCard group="Overlays" height=420 -->
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Drawer — preview</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 16px;
+        background: var(--canvas);
+        color: var(--ink);
+        font-family: var(--font-sans);
+      }
+      .row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        align-items: center;
+      }
+      .col {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+      .frame {
+        position: relative;
+        height: 388px;
+        transform: translateZ(0);
+        overflow: hidden;
+        border-radius: 10px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+      var V = window.VAPTLens,
+        h = React.createElement;
+      function R(el) {
+        ReactDOM.createRoot(document.getElementById("root")).render(el);
+      }
+      R(
+        h(
+          "div",
+          { className: "frame" },
+          h(
+            V.Drawer,
+            {
+              eyebrow: "Host · Tier 1 Crown Jewel",
+              title: "10.100.1.10",
+              mono: true,
+              meta: [
+                h(V.SeverityBadge, { key: 1, severity: "critical", count: 3 }),
+                h(V.ThreatTag, { key: 2, kind: "zeroday" }),
+                h(V.ThreatTag, { key: 3, kind: "eol" }),
+              ],
+              footer: [
+                h(V.Button, { key: 1, size: "sm" }, "Filter to host"),
+                h(
+                  V.Button,
+                  { key: 2, size: "sm", variant: "primary" },
+                  "Raise ticket",
+                ),
+              ],
+            },
+            h(
+              "div",
+              { className: "col" },
+              h(V.RiskMeter, { host: "Risk score", score: 184, max: 200 }),
+              h(V.AuditLogRow, {
+                action: "TICKET",
+                detail: "SEC-0142 raised for Apache Tomcat RCE",
+                role: "Remediation Lead",
+                time: "2026-07-02 10:14",
+              }),
+            ),
+          ),
+        ),
+      );
+    </script>
+  </body>
+</html>

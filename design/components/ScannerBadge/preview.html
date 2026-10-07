@@ -1,0 +1,48 @@
+<!-- @dsCard group="Ingestion" height=64 -->
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>ScannerBadge — preview</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 16px;
+        background: var(--canvas);
+        color: var(--ink);
+        font-family: var(--font-sans);
+        font-size: 13px;
+      }
+      .row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        align-items: center;
+      }
+      .col {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+      var V = window.VAPTLens,
+        h = React.createElement;
+      function R(el) {
+        ReactDOM.createRoot(document.getElementById("root")).render(el);
+      }
+      R(
+        h(
+          "div",
+          { className: "row" },
+          h(V.ScannerBadge, { tool: "Tenable Nessus", matched: 5, total: 5 }),
+          h(V.ScannerBadge, { tool: "OWASP ZAP", matched: 3, total: 5 }),
+          h(V.ScannerBadge, { matched: 1, total: 5 }),
+        ),
+      );
+    </script>
+  </body>
+</html>

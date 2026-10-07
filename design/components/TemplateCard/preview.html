@@ -1,0 +1,71 @@
+<!-- @dsCard group="Dashboard" height=220 -->
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>TemplateCard — preview</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 16px;
+        background: var(--canvas);
+        color: var(--ink);
+        font-family: var(--font-sans);
+        font-size: 13px;
+      }
+      .row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        align-items: center;
+      }
+      .col {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+      var V = window.VAPTLens,
+        h = React.createElement;
+      function R(el) {
+        ReactDOM.createRoot(document.getElementById("root")).render(el);
+      }
+      R(
+        h(
+          "div",
+          {
+            style: {
+              display: "grid",
+              gridTemplateColumns: "repeat(3,1fr)",
+              gap: "12px",
+              paddingTop: "36px",
+            },
+          },
+          h(V.TemplateCard, {
+            title: "Severity distribution",
+            description: "Active findings by severity.",
+            chart: "donut",
+            onAdd: function () {},
+          }),
+          h(V.TemplateCard, {
+            title: "Top 10 hosts",
+            description: "Hosts ranked by open findings.",
+            chart: "bar",
+            onAdd: function () {},
+          }),
+          h(V.TemplateCard, {
+            title: "Trend over time",
+            description: "Findings per scan batch.",
+            chart: "line",
+            locked: true,
+            lockReason: "Needs at least 2 dated scan batches.",
+          }),
+        ),
+      );
+    </script>
+  </body>
+</html>

@@ -1,0 +1,55 @@
+<!-- @dsCard group="Feedback" height=160 -->
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Toast — preview</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 16px;
+        background: var(--canvas);
+        color: var(--ink);
+        font-family: var(--font-sans);
+      }
+      .row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        align-items: center;
+      }
+      .col {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+      var V = window.VAPTLens,
+        h = React.createElement;
+      function R(el) {
+        ReactDOM.createRoot(document.getElementById("root")).render(el);
+      }
+      R(
+        h(
+          "div",
+          { className: "col" },
+          h(V.Toast, {
+            title: "PDF exported",
+            message: "vaptlens-executive-report-2026-07-01.pdf",
+            onClose: function () {},
+          }),
+          h(V.Toast, {
+            tone: "danger",
+            title: "Couldn't parse row 88",
+            message: "Unbalanced quote in the Description column.",
+            onClose: function () {},
+          }),
+        ),
+      );
+    </script>
+  </body>
+</html>

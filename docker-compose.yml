@@ -1,6 +1,63 @@
 services:
-  vapt-dashboard:
-    build: .
-    ports:
-      - "8080:80"
+  # production build served by nginx → http://localhost:8080
+  web:
+    build: { context: ., target: runtime }
+    image: vaptlens:latest
+    # loopback only by default. With no SYNC_TOKEN, /api/ is unauthenticated, so set a token
+    # before exposing this to a network: BIND_ADDR=0.0.0.0 in .env
+    ports: ["${BIND_ADDR:-127.0.0.1}:8080:8080"]
     restart: unless-stopped
+    read_only: true
+    tmpfs: ["/var/cache/nginx", "/var/run", "/tmp"]
+    security_opt: ["no-new-privileges:true"]
+
+  # PostgreSQL database for persistence. Not published: only the sync service reaches it.
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-vaptlens}
+      POSTGRES_USER: ${POSTGRES_USER:-vaptlens}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env, e.g. openssl rand -hex 24}
+    volumes: ["pg-data:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-vaptlens} -d $${POSTGRES_DB:-vaptlens}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # team sync (nginx proxies /api/ here). Not published: reachable only through nginx.
+  # Without SYNC_TOKEN it runs unauthenticated; set one before exposing the app, e.g. in .env:
+  #   echo "SYNC_TOKEN=$(openssl rand -hex 24)" >> .env
+  sync:
+    build: { context: ., target: sync }
+    image: vaptlens-sync:latest
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-vaptlens}:${POSTGRES_PASSWORD:?}@postgres:5432/${POSTGRES_DB:-vaptlens}
+      SYNC_TOKEN: ${SYNC_TOKEN:-}
+      PORT: 8787
+      HOST: 0.0.0.0  # inside the compose network only; no host port is published
+    volumes: ["sync-data:/data"]
+    restart: on-failure:3
+    read_only: true
+    security_opt: ["no-new-privileges:true"]
+
+  # Vite dev server with hot reload → http://localhost:5173
+  dev:
+    profiles: ["dev"]
+    build: { context: ., target: dev }
+    ports: ["${BIND_ADDR:-127.0.0.1}:5173:5173"]
+    volumes:
+      - ./src:/app/src
+      - ./index.html:/app/index.html
+      - ./public:/app/public
+    environment:
+      - CHOKIDAR_USEPOLLING=true
+      - SYNC_URL=http://sync:8787
+
+volumes:
+  sync-data:
+  pg-data:

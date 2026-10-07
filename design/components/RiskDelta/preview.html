@@ -1,0 +1,53 @@
+<!-- @dsCard group="Data display" height=150 -->
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>RiskDelta — preview</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 16px;
+        background: var(--canvas);
+        color: var(--ink);
+        font-family: var(--font-sans);
+        font-size: 13px;
+      }
+      .row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        align-items: center;
+      }
+      .col {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+      var V = window.VAPTLens,
+        h = React.createElement;
+      function R(el) {
+        ReactDOM.createRoot(document.getElementById("root")).render(el);
+      }
+      R(
+        h(
+          "div",
+          { className: "row", style: { alignItems: "stretch" } },
+          h(V.RiskDelta, {
+            pct: -38,
+            baseline: "Q1 2026",
+            retest: "Q2 2026",
+            before: "412.6",
+            after: "255.8",
+          }),
+          h(V.RiskDelta, { pct: 12, baseline: "Q4 2025", retest: "Q1 2026" }),
+        ),
+      );
+    </script>
+  </body>
+</html>

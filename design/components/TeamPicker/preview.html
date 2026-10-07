@@ -1,0 +1,47 @@
+<!-- @dsCard group="Governance" height=150 -->
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>TeamPicker — preview</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 16px;
+        background: var(--canvas);
+        color: var(--ink);
+        font-family: var(--font-sans);
+        font-size: 13px;
+      }
+      .row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        align-items: center;
+      }
+      .col {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+      var V = window.VAPTLens,
+        h = React.createElement;
+      function R(el) {
+        ReactDOM.createRoot(document.getElementById("root")).render(el);
+      }
+      R(
+        h(
+          "div",
+          { className: "col" },
+          h(V.TeamPicker, { team: "Database DBAs", role: "R" }),
+          h(V.TeamPicker, { team: "SecOps", role: "C", readOnly: true }),
+        ),
+      );
+    </script>
+  </body>
+</html>

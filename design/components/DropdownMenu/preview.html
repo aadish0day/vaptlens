@@ -1,0 +1,66 @@
+<!-- @dsCard group="Actions" height=240 -->
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>DropdownMenu — preview</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 16px;
+        background: var(--canvas);
+        color: var(--ink);
+        font-family: var(--font-sans);
+        font-size: 13px;
+      }
+      .row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        align-items: center;
+      }
+      .col {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+      var V = window.VAPTLens,
+        h = React.createElement;
+      function R(el) {
+        ReactDOM.createRoot(document.getElementById("root")).render(el);
+      }
+      R(
+        h(
+          "div",
+          {
+            className: "row",
+            style: { alignItems: "flex-start", gap: "40px" },
+          },
+          h(V.DropdownMenu, {
+            label: "Export",
+            icon: "download",
+            defaultOpen: true,
+            items: [
+              { label: "Dashboard as PNG", icon: "download", hint: "2x" },
+              { label: "Dashboard as PDF", icon: "file" },
+              { label: "Re-test verification", icon: "file", hint: ".csv" },
+              "-",
+              { label: "Clear saved layout", danger: true },
+            ],
+          }),
+          h(V.DropdownMenu, {
+            label: "Widget",
+            variant: "ghost",
+            size: "sm",
+            items: [{ label: "Edit" }],
+          }),
+        ),
+      );
+    </script>
+  </body>
+</html>

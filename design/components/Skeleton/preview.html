@@ -1,0 +1,56 @@
+<!-- @dsCard group="Feedback" height=160 -->
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Skeleton — preview</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 16px;
+        background: var(--canvas);
+        color: var(--ink);
+        font-family: var(--font-sans);
+      }
+      .row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        align-items: center;
+      }
+      .col {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+      .box {
+        background: var(--surface-100);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        overflow: hidden;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+      var V = window.VAPTLens,
+        h = React.createElement;
+      function R(el) {
+        ReactDOM.createRoot(document.getElementById("root")).render(el);
+      }
+      R(
+        h(
+          "div",
+          { className: "col", style: { maxWidth: "520px" } },
+          h(V.Skeleton, { width: "40%", height: "16px" }),
+          h(
+            "div",
+            { className: "box" },
+            h(V.Skeleton, { variant: "rows", rows: 3 }),
+          ),
+        ),
+      );
+    </script>
+  </body>
+</html>

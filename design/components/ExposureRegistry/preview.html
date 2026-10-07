@@ -1,0 +1,73 @@
+<!-- @dsCard group="Data display" height=240 -->
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>ExposureRegistry — preview</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 16px;
+        background: var(--canvas);
+        color: var(--ink);
+        font-family: var(--font-sans);
+        font-size: 13px;
+      }
+      .row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        align-items: center;
+      }
+      .col {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+      var V = window.VAPTLens,
+        h = React.createElement;
+      function R(el) {
+        ReactDOM.createRoot(document.getElementById("root")).render(el);
+      }
+      R(
+        h(V.ExposureRegistry, {
+          items: [
+            {
+              kind: "zeroday",
+              name: "Apache Tomcat AJP RCE",
+              detail: "CVE-2026-9999",
+              hosts: 1,
+              criticals: 1,
+            },
+            {
+              kind: "eol",
+              name: "Apache Tomcat",
+              detail: "6.0.53 · EOL 2016-12-31",
+              hosts: 1,
+              criticals: 1,
+            },
+            {
+              kind: "eol",
+              name: "MySQL",
+              detail: "5.7.44 · EOL 2023-10-31",
+              hosts: 2,
+              criticals: 0,
+            },
+            {
+              kind: "eol",
+              name: "OpenSSL",
+              detail: "1.1.1w · EOL 2023-09-11",
+              hosts: 3,
+              criticals: 0,
+            },
+          ],
+        }),
+      );
+    </script>
+  </body>
+</html>

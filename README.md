@@ -1,107 +1,84 @@
-# VAPTLens — Universal VAPT Scan Analytics
+# VAPTLens
 
-A **client-side, Power BI-style dashboard** for vulnerability scan data. Drop in a CSV
-export from *any* scanner, and explore the results on a draggable, cross-filtering canvas —
-no backend, no uploads, **your scan data never leaves the browser**.
+Zero-trust VAPT analytics workbench. Scan files are parsed in the browser, data is encrypted in IndexedDB, and the page never talks to third parties. nginx serves the static files; an optional [team sync](#team-sync-optional) server stores encrypted snapshots only.
 
-Built with Vite + React + TypeScript, `recharts`, `zustand`, `react-grid-layout`, and `papaparse`.
+**Stack:** React 18 · TypeScript · Vite 5 · nginx (Docker)
 
----
+## Run with Docker
 
-## Quick start
+```bash
+docker compose up --build          # production build on http://localhost:8080
+docker compose --profile dev up dev  # Vite dev server with hot reload on http://localhost:5173
+```
 
-### Dev
+Without Compose:
+
+```bash
+docker build -t vaptlens .
+docker run --rm -p 8080:8080 vaptlens
+```
+
+The image is multi-stage: Node builds `dist/`, then `nginx:alpine` serves it (no Node at runtime). It ships a strict Content-Security-Policy (`connect-src 'self'`, no third-party scripts), `/healthz` for health checks, long-cache headers on hashed assets, and the Compose service runs read-only with `no-new-privileges`.
+
+## Run locally (Node 20+)
 
 ```bash
 npm install
-npm run dev      # http://localhost:5173
+npm run dev        # http://localhost:5173
+npm run build      # typecheck + production build into dist/
+npm run preview    # serve dist/ on http://localhost:4173
 ```
-
-### Docker (no build tooling needed)
-
-```bash
-docker compose up --build
-# open http://localhost:8080
-```
-
----
-
-## How it works
-
-1. **Upload** one or more CSVs (Nessus, OpenVAS/Greenbone, Qualys, Burp Suite, OWASP ZAP,
-   Nikto, or anything else). Each file becomes a labeled *scan batch*.
-2. The importer **auto-detects** the tool from its headers. If nothing matches, you get a
-   manual column mapper with best-guess defaults — and you can save the mapping as a named
-   preset for next time.
-3. Every row is normalized into a common schema: a single 5-level severity scale
-   (`Critical / High / Medium / Low / Info`), CVSS, CVE, host, port, tool, scan date.
-4. Build your canvas: **drag, resize, remove, and add** widgets. Pick from the template
-   gallery or build a chart from scratch (any field → any axis → any chart type).
-5. Everything reacts to a shared **slicer panel** (severity, host, tool, port, scan,
-   date range, free text) and to **click-driven cross-filters** — click a bar, slice, or
-   point in any chart and every other widget + the findings table filters to match.
-
-The whole thing is powered by one `aggregate()` function — templates and the custom widget
-builder are the same engine, so they behave identically.
-
----
-
-## Exporting CSVs from each tool
-
-| Tool | How to get the CSV |
-|---|---|
-| **Nessus** | In a scan, go to *Results* → *Export* → **CSV** (not `.nessus`). Columns like `Host`, `Plugin ID`, `Risk`, `CVSS`, `CVE` are detected automatically. |
-| **OpenVAS / Greenbone** | *Reports* → *Downloads* → **CSV**. Look for `IP`, `NVT`, `OID`, `Threat`, `CVSS`. |
-| **Qualys** | *Vulnerability Management* → *Reports* → export as **CSV**. Severity is numeric (1–5) and is mapped automatically. |
-| **Burp Suite** | *Target* / *Issue activity* → right-click → **Save selected issues** → **CSV**. |
-| **OWASP ZAP** | *Alerts* tab → *Export* → **CSV**. |
-| **Nikto** | Run with `-Format csv -o nikto.csv` (e.g. `nikto -h target -Format csv -o nikto.csv`). |
-| **Anything else** | Any CSV with a host column (and ideally a severity/cvss column) works. The manual mapper handles the rest. |
-
-If a file isn't recognized, the column mapper opens with sensible guesses. Required column:
-a **Host / IP** column. Severity is derived from a severity column if present, otherwise
-from CVSS (`≥9 Critical`, `≥7 High`, `≥4 Medium`, `>0 Low`, else `Info`).
-
----
-
-## Using the widget builder
-
-Click **+ Add Widget**. Choose:
-
-- **Chart type** — Bar, Donut, Line, Histogram, Table, or KPI.
-- **Group by** — the category axis (severity, host, tool, port, CVSS band, scan date, …).
-- **Aggregation** — Count, Average/Max CVSS, Distinct hosts, Distinct findings.
-- **Color / split by** (optional) — adds a stacked/series breakdown (e.g. split a host bar
-  by severity).
-- **Top N / Sort by** — for ranking charts.
-
-A **live preview** updates as you change options. Adding it drops the widget onto the canvas
-where you can drag, resize, or remove it.
-
-The **Template Gallery** adds the same configs pre-filled (severity donut, top-10 hosts,
-recurring findings, port distribution, CVSS histogram, tool comparison, and a trend line that
-enables itself once you have 2+ dated scans).
-
-Layout — which widgets exist and where they sit — is saved to `localStorage` and survives
-reloads.
-
----
 
 ## Project layout
 
 ```
 src/
-  lib/            types, tool presets + severity normalization, CSV parser, the BI engine, storage
-  store/          zustand store (findings, filters, widgets/layout, actions)
-  components/      UploadZone, ColumnMapper, SlicerPanel, FilterChips, WidgetBuilder,
-                   TemplateGallery, DashboardCanvas, Widget, VulnTable, charts/
-  App.tsx         terminal-banner shell + layout + one-time scanline sweep on import
+  main.tsx              entry: styles, theme, mounts <Root/>
+  app/
+    App.tsx             app state + routing (the "ctx" passed to every view)
+    shell/              Root (sign-in gate), ThemePicker
+    auth/               setup, login, change-password screens
+    users/              user management, key rotation
+    views/<view>/       one folder per screen: dashboard, assets, sla, metrics, attack,
+                        priority, remediation, network, retest, report, governance, findings
+    components/         shared app components (FindingDrawer, Inbox, Palette, …)
+    upload/ data/ automation/ assistant/
+    lib/                app helpers: export (files, PDF, PNG), filters, integrations, …
+  lib/                  framework-free core: engine (risk, SLA, SSVC, metrics), parsers
+                        (Nessus, Burp, ZAP, Nuclei, Trivy, SARIF, Nmap, CSV…), store
+                        (IndexedDB + vault), auth (local accounts), dash (widgets), data
+  ui/                   VAPTLens component library, one component per file (index.ts re-exports)
+  styles/               fonts, design tokens, component and app CSS
+design/                 design system: tokens.json, DESIGN.md, SVG logos/icons, fonts,
+                        component docs (synced to claude.ai with /design-sync)
+docker/                 nginx config + security headers
 ```
 
----
+Imports use the `@/` alias for `src/`. Types are deliberately loose for now (`strict: false`); tighten file by file.
 
-## Privacy
+## Notes
 
-This app makes **no network requests** with your data. All parsing, aggregation, and storage
-happen locally in the browser. You can confirm this by watching the Network tab while
-uploading — only the static app assets load.
+- Self-hosted downloads (CSV, PDF, PNG, Word, ZIP) use a normal browser download; nothing is uploaded.
+
+## Team sync (optional)
+
+Share a workspace between browsers through a small sync server that only stores the encrypted snapshot (the same file as *Export workspace*). Findings stay AES-GCM ciphertext; each teammate signs in with their own account, whose password unwraps the shared data key.
+
+```bash
+echo "SYNC_TOKEN=$(openssl rand -hex 24)" >> .env   # turns sync on
+docker compose up --build
+```
+
+- **First person:** sign in, open *Data → Team sync*, paste the token, **Push to team**. Add teammates' accounts in *Users* and push again.
+- **Teammates:** on the first screen open *Joining a team?*, paste the token and pull; then sign in with the account made for you.
+- A push is refused if a teammate pushed since your last pull: pull (replaces your copy), redo the change, push. There is no merge.
+- Security Auditors can pull but not push. The server can't read the data, so it can't enforce roles; it only checks the team token.
+- The snapshot contains usernames, roles and password-wrapped keys, so whoever holds the server database can try to guess passwords offline. Use long passwords, keep the token secret, and serve over HTTPS.
+
+Data lives in PostgreSQL (`pg-data` volume). Set `POSTGRES_PASSWORD` in `.env` before the first `docker compose up`; neither Postgres (5432) nor the sync server (8787) is published to the host, and the app on 8080 binds to `127.0.0.1` unless you set `BIND_ADDR`. **Without `SYNC_TOKEN` the API is unauthenticated**: anyone who can reach port 8080 can read and write every workspace, so set a token before using `BIND_ADDR=0.0.0.0`.
+- The in-app AI assistant needs the claude.ai runtime; when self-hosted it reports that it is unavailable. Everything else works offline.
+- Test hooks for end-to-end scripts live on `window.__vl` and `window.__vlTest`.
+
+## UI components
+
+`src/ui/` holds the VAPTLens component library. Besides the core set (tables, charts, drawers, badges…) it includes form and workflow pieces: Select, DateRangePicker, TagInput, RadioGroup, Textarea, Slider, QueryBuilder, Wizard, Pagination, Breadcrumbs, Accordion, Popover, JsonViewer, DiffView, FunnelChart, CalendarHeatmap, Gauge, ActivityTimeline and more. Run `npm run dev` and open `/gallery.html` to try them all.

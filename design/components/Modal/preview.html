@@ -1,0 +1,96 @@
+<!-- @dsCard group="Overlays" height=460 -->
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Modal — preview</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 16px;
+        background: var(--canvas);
+        color: var(--ink);
+        font-family: var(--font-sans);
+      }
+      .row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        align-items: center;
+      }
+      .col {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+      .frame {
+        position: relative;
+        height: 428px;
+        transform: translateZ(0);
+        overflow: hidden;
+        border-radius: 10px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+      var V = window.VAPTLens,
+        h = React.createElement;
+      function R(el) {
+        ReactDOM.createRoot(document.getElementById("root")).render(el);
+      }
+      R(
+        h(
+          "div",
+          { className: "frame" },
+          h(
+            V.Modal,
+            {
+              title: "Map columns",
+              subtitle: "scan-export.csv · 14 columns · tool not recognised",
+              footer: [
+                h(V.Button, { key: "c" }, "Cancel"),
+                h(
+                  V.Button,
+                  { key: "s", variant: "primary" },
+                  "Import 212 rows",
+                ),
+              ],
+            },
+            h(
+              "div",
+              { className: "col" },
+              [
+                ["host", "Target IP"],
+                ["severity", "Risk Level"],
+                ["cvss", "Score"],
+                ["name", "Vulnerability"],
+              ].map(function (p) {
+                return h(
+                  "div",
+                  {
+                    key: p[0],
+                    className: "row",
+                    style: { justifyContent: "space-between" },
+                  },
+                  h(
+                    "span",
+                    {
+                      style: {
+                        fontFamily: "var(--font-mono)",
+                        color: "var(--ink-muted)",
+                      },
+                    },
+                    p[0],
+                  ),
+                  h(V.MultiSelect, { placeholder: p[1] }),
+                );
+              }),
+            ),
+          ),
+        ),
+      );
+    </script>
+  </body>
+</html>
