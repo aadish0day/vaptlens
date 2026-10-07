@@ -2,11 +2,13 @@ import React, { useEffect, useState } from "react";
 import { Button } from "@/ui/Button";
 import { Icon } from "@/ui/Icon";
 import { cx, menuKeys, useLayer } from "@/ui/core";
+import { MenuSurface, useMenuHighlight } from "@/ui/MenuSurface";
 
 /* ---------- DropdownMenu ---------- */
 export function DropdownMenu(props) {
   var o = useState(!!props.defaultOpen),
     wrap = React.useRef(null);
+  var hl = useMenuHighlight();
   function focusTrigger() {
     var b = wrap.current && wrap.current.querySelector("[aria-haspopup]");
     if (b) b.focus();
@@ -49,15 +51,20 @@ export function DropdownMenu(props) {
         {props.label}
         <Icon name="chevron-down" size={14} />
       </Button>
-      {o[0] ? (
-        <div
-          className={cx("vl-menu", props.align === "right" && "is-right")}
-          role="menu"
-          onKeyDown={function (e) {
-            menuKeys(e, '[role="menuitem"]');
-          }}
-        >
-          {(props.items || []).map(function (it, i) {
+      <MenuSurface
+        open={o[0]}
+        className={cx("vl-menu has-hl", props.align === "right" && "is-right")}
+        style={{
+          transformOrigin: props.align === "right" ? "top right" : "top left",
+        }}
+        role="menu"
+        onKeyDown={function (e) {
+          menuKeys(e, '[role="menuitem"]');
+        }}
+        {...hl.list}
+      >
+        {hl.group(
+          (props.items || []).map(function (it, i) {
             if (it === "-")
               return <div key={i} className="vl-menu-sep" role="separator" />;
             return (
@@ -66,12 +73,14 @@ export function DropdownMenu(props) {
                 type="button"
                 role="menuitem"
                 className={cx("vl-menu-item", it.danger && "is-danger")}
+                {...hl.item(i)}
                 onClick={function () {
                   o[1](false);
                   focusTrigger();
                   if (it.onSelect) it.onSelect();
                 }}
               >
+                {hl.mark(i)}
                 {it.icon ? (
                   <Icon name={it.icon} size={14} />
                 ) : (
@@ -83,9 +92,9 @@ export function DropdownMenu(props) {
                 ) : null}
               </button>
             );
-          })}
-        </div>
-      ) : null}
+          }),
+        )}
+      </MenuSurface>
     </div>
   );
 }

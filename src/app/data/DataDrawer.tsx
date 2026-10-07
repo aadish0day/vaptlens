@@ -64,15 +64,17 @@ export function DataDrawer(p) {
       });
   }
   function backup() {
-    exportWorkspace().then(function (j) {
-      return saveFile(p, "vaptlens-workspace-" + localDay() + ".json", j);
-    }).catch(function (e) {
-      p.toast({
-        title: "Couldn't save backup",
-        message: e.message,
-        tone: "danger",
+    exportWorkspace()
+      .then(function (j) {
+        return saveFile(p, "vaptlens-workspace-" + localDay() + ".json", j);
+      })
+      .catch(function (e) {
+        p.toast({
+          title: "Couldn't save backup",
+          message: e.message,
+          tone: "danger",
+        });
       });
-    });
   }
   /* restore asks once: it replaces this workspace's data on the server (accounts are untouched) */
   var rf = useState(null);
@@ -137,7 +139,11 @@ export function DataDrawer(p) {
   );
   function refreshWs() {
     return WS.list().then(wl[1], function (e) {
-      p.toast({ title: "Couldn't list workspaces", message: e.message, tone: "danger" });
+      p.toast({
+        title: "Couldn't list workspaces",
+        message: e.message,
+        tone: "danger",
+      });
     });
   }
   function switchWs(name) {
@@ -194,18 +200,18 @@ export function DataDrawer(p) {
               >
                 Cancel
               </V.Button>,
-              <V.Button
+              <V.HoldToConfirm
                 key="y"
-                size="sm"
-                variant="danger"
-                onClick={function () {
+                confirmLabel="Cleared"
+                resetAfter={0}
+                onConfirm={function () {
                   p.clearAll();
                   cf[1](false);
                   p.onClose();
                 }}
               >
-                Clear all data
-              </V.Button>,
+                Hold to clear all data
+              </V.HoldToConfirm>,
             ]
           : [
               <V.Button
@@ -444,7 +450,9 @@ export function DataDrawer(p) {
                               " active findings"
                             : "Created " +
                               fmtTime((w as any).createdAt) +
-                              ((w as any).createdBy ? " by " + (w as any).createdBy : "")}
+                              ((w as any).createdBy
+                                ? " by " + (w as any).createdBy
+                                : "")}
                         </span>
                       </div>
                       <span />
@@ -534,8 +542,8 @@ export function DataDrawer(p) {
           <div className="stack">
             <p className="up-help">
               Download the feeds yourself and drop them here. They're parsed in
-              this browser and cached here; VAPTLens never fetches anything
-              from the internet. Every finding is re-scored when a feed loads.
+              this browser and cached here; VAPTLens never fetches anything from
+              the internet. Every finding is re-scored when a feed loads.
             </p>
             <div className="intel">
               <div className="intel-row">
@@ -718,9 +726,9 @@ export function DataDrawer(p) {
               Accounts, sessions and every change live on this VAPTLens server.
               Your role is checked by the server on every request, so what the
               screen hides is also refused if someone calls the API directly.
-              The audit log is written by the server, stamped with who did
-              what, and hash-chained so edits to the database show up when you
-              verify it.
+              The audit log is written by the server, stamped with who did what,
+              and hash-chained so edits to the database show up when you verify
+              it.
             </V.Banner>
             <dl className="kv">
               <dt>Idle sign-out</dt>
@@ -776,28 +784,30 @@ export function DataDrawer(p) {
                     title: "Building evidence pack…",
                     tone: "info",
                   });
-                  buildEvidencePack(p).then(
-                    function (b) {
-                      return saveFile(
-                        p,
-                        "vaptlens-evidence-pack-" + localDay() + ".zip",
-                        b,
-                      );
-                    },
-                    function (e) {
+                  buildEvidencePack(p)
+                    .then(
+                      function (b) {
+                        return saveFile(
+                          p,
+                          "vaptlens-evidence-pack-" + localDay() + ".zip",
+                          b,
+                        );
+                      },
+                      function (e) {
+                        p.toast({
+                          title: "Couldn't build the evidence pack",
+                          message: e.message,
+                          tone: "danger",
+                        });
+                      },
+                    )
+                    .catch(function (e) {
                       p.toast({
-                        title: "Couldn't build the evidence pack",
+                        title: "Couldn't save the evidence pack",
                         message: e.message,
                         tone: "danger",
                       });
-                    }
-                  ).catch(function(e) {
-                    p.toast({
-                      title: "Couldn't save the evidence pack",
-                      message: e.message,
-                      tone: "danger",
                     });
-                  });
                 }}
               >
                 Evidence pack (.zip)
@@ -829,9 +839,13 @@ export function DataDrawer(p) {
                 title={"Restore " + rf[0].name + "?"}
                 action={
                   <span className="row-wrap">
-                    <V.Button size="sm" variant="danger" onClick={doRestore}>
-                      Replace everything
-                    </V.Button>
+                    <V.HoldToConfirm
+                      confirmLabel="Restoring"
+                      resetAfter={0}
+                      onConfirm={doRestore}
+                    >
+                      Hold to replace everything
+                    </V.HoldToConfirm>
                     <V.Button
                       size="sm"
                       onClick={function () {
@@ -848,7 +862,10 @@ export function DataDrawer(p) {
                   ". This workspace's scans, decisions and evidence on the server are replaced for everyone. Accounts aren't affected."}
               </V.Banner>
             ) : null}
-            <V.Banner tone="warn" title={"Restore replaces workspace " + WS.current()}>
+            <V.Banner
+              tone="warn"
+              title={"Restore replaces workspace " + WS.current()}
+            >
               Export first if you want to keep what's here. The restore is
               recorded in the audit log.
             </V.Banner>

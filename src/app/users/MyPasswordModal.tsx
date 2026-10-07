@@ -23,7 +23,8 @@ export function MyPasswordModal(p) {
         <V.Button
           key="s"
           variant="primary"
-          disabled={!ok || busy[0]}
+          disabled={!ok}
+          loading={busy[0]}
           onClick={function () {
             busy[1](true);
             AUTH.changePassword(cur[0], a[0]).then(

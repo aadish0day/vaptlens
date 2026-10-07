@@ -1084,7 +1084,7 @@
   --signal: #a78bfa;
   --signal-soft: #221a3d;
   --on-signal: #0f0720;
-  --scrim: rgba(5,5,8,0.7);
+  --scrim: rgba(5, 5, 8, 0.7);
   --tooltip-bg: var(--surface-300);
   --focus-ring: #a78bfa;
   --sev-critical: #ff4d6a;
@@ -1167,7 +1167,7 @@
   --signal: #3fa7e8;
   --signal-soft: #0b2433;
   --on-signal: #04121c;
-  --scrim: rgba(0,0,0,0.66);
+  --scrim: rgba(0, 0, 0, 0.66);
   --tooltip-bg: var(--surface-300);
   --focus-ring: #3fa7e8;
   --sev-critical: #ff4d6a;
@@ -1250,7 +1250,7 @@
   --signal: #ffda14;
   --signal-soft: #2e2706;
   --on-signal: #1a1400;
-  --scrim: rgba(4,3,16,0.7);
+  --scrim: rgba(4, 3, 16, 0.7);
   --tooltip-bg: var(--surface-300);
   --focus-ring: #ffda14;
   --sev-critical: #ff4d6a;
@@ -1333,7 +1333,7 @@
   --signal: #a9532b;
   --signal-soft: #f8e3d6;
   --on-signal: #ffffff;
-  --scrim: rgba(45,25,10,0.38);
+  --scrim: rgba(45, 25, 10, 0.38);
   --tooltip-bg: var(--surface-300);
   --focus-ring: #a9532b;
   --sev-critical: #c8173a;
@@ -1415,7 +1415,7 @@
   --signal: #0b5c55;
   --signal-soft: #d9ebe6;
   --on-signal: #ffffff;
-  --scrim: rgba(7,30,30,0.38);
+  --scrim: rgba(7, 30, 30, 0.38);
   --tooltip-bg: var(--surface-300);
   --focus-ring: #0b5c55;
   --sev-critical: #c8173a;
@@ -1497,7 +1497,7 @@
   --signal: #6442d6;
   --signal-soft: #e9ddff;
   --on-signal: #ffffff;
-  --scrim: rgba(29,27,32,0.4);
+  --scrim: rgba(29, 27, 32, 0.4);
   --tooltip-bg: var(--surface-300);
   --focus-ring: #6442d6;
   --sev-critical: #c8173a;
@@ -1579,7 +1579,7 @@
   --signal: #006666;
   --signal-soft: #cde3e3;
   --on-signal: #ffffff;
-  --scrim: rgba(0,0,0,0.4);
+  --scrim: rgba(0, 0, 0, 0.4);
   --tooltip-bg: var(--surface-300);
   --focus-ring: #000080;
   --sev-critical: #c8173a;
@@ -1773,18 +1773,30 @@
   --tracking-caps: 0.08em;
   --tracking-label: 0.1em;
   /* semantic type styles: use as `font: var(--type-body-sm);` (letter-spacing set separately) */
-  --type-kpi: var(--weight-semibold) var(--text-7xl) / var(--leading-3xl) var(--font-display);
-  --type-title-lg: var(--weight-semibold) var(--text-5xl) / var(--leading-2xl) var(--font-display);
-  --type-title: var(--weight-semibold) var(--text-xl) / var(--leading-xl) var(--font-display);
-  --type-body: var(--weight-regular) var(--text-md) / var(--leading-lg) var(--font-sans);
-  --type-body-sm: var(--weight-regular) var(--text-base) / var(--leading-base) var(--font-sans);
-  --type-body-strong: var(--weight-medium) var(--text-base) / var(--leading-base) var(--font-sans);
-  --type-caption: var(--weight-medium) var(--text-sm) / var(--leading-sm) var(--font-sans);
-  --type-card-title: var(--weight-semibold) var(--text-xs) / var(--leading-sm) var(--font-mono);
-  --type-label: var(--weight-medium) var(--text-label) / var(--leading-xs) var(--font-mono);
-  --type-mono: var(--weight-regular) var(--text-base) / var(--leading-base) var(--font-mono);
-  --type-mono-sm: var(--weight-medium) var(--text-sm) / var(--leading-sm) var(--font-mono);
-  --type-code: var(--weight-regular) var(--text-code) / var(--leading-base) var(--font-mono);
+  --type-kpi: var(--weight-semibold) var(--text-7xl) / var(--leading-3xl)
+    var(--font-display);
+  --type-title-lg: var(--weight-semibold) var(--text-5xl) / var(--leading-2xl)
+    var(--font-display);
+  --type-title: var(--weight-semibold) var(--text-xl) / var(--leading-xl)
+    var(--font-display);
+  --type-body: var(--weight-regular) var(--text-md) / var(--leading-lg)
+    var(--font-sans);
+  --type-body-sm: var(--weight-regular) var(--text-base) / var(--leading-base)
+    var(--font-sans);
+  --type-body-strong: var(--weight-medium) var(--text-base) /
+    var(--leading-base) var(--font-sans);
+  --type-caption: var(--weight-medium) var(--text-sm) / var(--leading-sm)
+    var(--font-sans);
+  --type-card-title: var(--weight-semibold) var(--text-xs) / var(--leading-sm)
+    var(--font-mono);
+  --type-label: var(--weight-medium) var(--text-label) / var(--leading-xs)
+    var(--font-mono);
+  --type-mono: var(--weight-regular) var(--text-base) / var(--leading-base)
+    var(--font-mono);
+  --type-mono-sm: var(--weight-medium) var(--text-sm) / var(--leading-sm)
+    var(--font-mono);
+  --type-code: var(--weight-regular) var(--text-code) / var(--leading-base)
+    var(--font-mono);
 
   /* ---- motion additions (aligned with Carbon's duration ladder) ---- */
   --duration-slower: 400ms; /* large expansion, important notifications */
@@ -1792,7 +1804,12 @@
   --duration-loop-fast: 800ms; /* spinner rotation */
   --duration-loop: 1400ms; /* pulse, skeleton shimmer, indeterminate bars */
   --duration-loop-slow: 2400ms; /* status LED breathing */
-  --ease-exit: cubic-bezier(0.2, 0, 1, 0.9); /* elements leaving (Carbon productive exit) */
+  --ease-exit: cubic-bezier(
+    0.2,
+    0,
+    1,
+    0.9
+  ); /* elements leaving (Carbon productive exit) */
 
   /* ---- spacing roles: every layout and component inset resolves to one of these.
      Density ([data-density]) and breakpoints change the role, never the component rule. ---- */
@@ -1800,15 +1817,27 @@
   --page-pad-x: var(--space-8); /* view side padding */
   --page-pad-bottom: var(--space-12); /* room under the last section */
   --page-gap: var(--space-6); /* between the status strip area and the view */
-  --gap-section: var(--space-4); /* between page sections (head, grids, cards) */
-  --gap-grid: var(--space-4); /* between cards in a grid; also the dashboard grid margin */
+  --gap-section: var(
+    --space-4
+  ); /* between page sections (head, grids, cards) */
+  --gap-grid: var(
+    --space-4
+  ); /* between cards in a grid; also the dashboard grid margin */
   --gap-stack: var(--space-4); /* between stacked blocks inside a section */
-  --gap-inline: var(--space-2); /* between inline controls: buttons, chips, filters */
+  --gap-inline: var(
+    --space-2
+  ); /* between inline controls: buttons, chips, filters */
   --gap-tight: var(--space-1); /* icon to label, tag to tag */
-  --inset-card: var(--space-5); /* card body and card title share it, so content aligns under the title */
-  --inset-card-end: var(--space-3); /* card header end, where action buttons sit */
+  --inset-card: var(
+    --space-5
+  ); /* card body and card title share it, so content aligns under the title */
+  --inset-card-end: var(
+    --space-3
+  ); /* card header end, where action buttons sit */
   --inset-overlay: var(--space-5); /* modal and drawer head, body and footer */
-  --inset-cell: var(--space-4); /* table cell sides; bleed tables align the outer cells to --inset-card */
+  --inset-cell: var(
+    --space-4
+  ); /* table cell sides; bleed tables align the outer cells to --inset-card */
 
   /* ---- sizes for recurring inline UI ---- */
   --chip-height: 22px; /* tags, badges with text, inline meters */
@@ -1816,7 +1845,8 @@
 
   /* ---- composed rings and highlights ---- */
   --ring-offset: 0 0 0 2px var(--surface-100); /* gap between a control and its focus ring */
-  --shadow-focus-soft: 0 0 0 3px color-mix(in srgb, var(--signal) 25%, transparent);
+  --shadow-focus-soft: 0 0 0 3px
+    color-mix(in srgb, var(--signal) 25%, transparent);
   --highlight-inset: inset 0 1px 0 rgba(255, 255, 255, 0.22); /* top sheen on filled buttons */
   --highlight-inset-soft: inset 0 1px 0 rgba(255, 255, 255, 0.03);
 
@@ -1828,7 +1858,6 @@
   --paper-muted: #4a5a6a;
   --paper-border: #d3dbe3;
   --paper-watermark: rgba(160, 20, 40, 0.07);
-
 }
 .paper {
   color-scheme: light;

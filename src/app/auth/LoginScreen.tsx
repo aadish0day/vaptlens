@@ -17,9 +17,7 @@ export function LoginScreen(p) {
   return (
     <AuthShell
       title="Sign in"
-      sub={
-"Sign in with the account an administrator gave you."
-      }
+      sub={"Sign in with the account an administrator gave you."}
       cta="Sign in"
       busyLabel="Signing in…"
       busy={busy[0]}

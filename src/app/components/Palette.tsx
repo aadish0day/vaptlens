@@ -4,6 +4,11 @@ import { saveFile } from "@/app/lib/export";
 import { localDay } from "@/lib/engine";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import * as V from "@/ui";
+import { motion } from "motion/react";
+import { NONE, useReduced } from "@/ui/motion";
+
+/* the selection glides between rows (interior.dev command-palette) */
+var GLIDE = { type: "spring", stiffness: 700, damping: 46, mass: 0.5 } as const;
 
 /* ---------- Command palette ---------- */
 export function Palette(p) {
@@ -133,6 +138,7 @@ export function Palette(p) {
           })
         : items.slice(0, 12)
     ).slice(0, 12);
+  var reduced = useReduced();
   function go(it) {
     p.onClose();
     setTimeout(it.run, 30);
@@ -169,7 +175,12 @@ export function Palette(p) {
             }
           }}
         />
-        <ul className="pal-list" role="listbox" id="pal-list" aria-label="Commands">
+        <ul
+          className="pal-list"
+          role="listbox"
+          id="pal-list"
+          aria-label="Commands"
+        >
           {list.map(function (it, i) {
             return (
               <li
@@ -185,6 +196,14 @@ export function Palette(p) {
                   go(it);
                 }}
               >
+                {i === sel[0] ? (
+                  <motion.i
+                    layoutId="pal-hl"
+                    className="pal-hl"
+                    aria-hidden="true"
+                    transition={reduced ? NONE : GLIDE}
+                  />
+                ) : null}
                 <span>{it.label}</span>
                 <kbd>{it.hint}</kbd>
               </li>

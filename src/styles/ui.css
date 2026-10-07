@@ -431,6 +431,20 @@ button.vl-kpi:hover {
   border-radius: var(--radius-xs) var(--radius-xs) 0 0;
   background: var(--lens);
 }
+.vl-nav-tab:has(.vl-nav-indicator)::after {
+  display: none;
+}
+.vl-nav-indicator {
+  position: absolute;
+  left: var(--space-3);
+  right: var(--space-3);
+  bottom: 0;
+  height: 2px;
+  border-radius: var(--radius-xs) var(--radius-xs) 0 0;
+  background: var(--lens);
+  pointer-events: none;
+  z-index: 1;
+}
 
 /* Risk meter */
 .vl-risk {
@@ -759,6 +773,8 @@ button.vl-kpi:hover {
 
 /* Segmented control */
 .vl-seg {
+  position: relative;
+  isolation: isolate;
   display: inline-flex;
   align-self: flex-start;
   width: max-content;
@@ -769,6 +785,8 @@ button.vl-kpi:hover {
   border: 1px solid var(--border);
 }
 .vl-seg-opt {
+  position: relative;
+  z-index: 1;
   height: 24px;
   padding: 0 var(--space-2\.5);
   border: 0;
@@ -787,6 +805,23 @@ button.vl-kpi:hover {
   color: var(--ink);
   font-weight: 600;
   box-shadow: 0 0 0 1px var(--border-strong);
+}
+.vl-seg-opt:has(.vl-seg-pill).is-on {
+  background: transparent;
+  box-shadow: none;
+}
+.vl-seg-pill {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius-sm);
+  background: var(--surface-100);
+  box-shadow: 0 0 0 1px var(--border-strong);
+  z-index: -1;
+  pointer-events: none;
+}
+.vl-seg-label {
+  position: relative;
+  z-index: 1;
 }
 .vl-seg-opt:focus-visible {
   outline: 2px solid var(--focus-ring);
@@ -986,26 +1021,6 @@ button.vl-kpi:hover {
   .vl-modal {
     max-height: 100%;
     border-radius: 0;
-  }
-}
-@media (prefers-reduced-motion: no-preference) {
-  .vl-drawer {
-    animation: vl-slide var(--duration-base) var(--ease-out);
-  }
-  .vl-modal {
-    animation: vl-rise var(--duration-base) var(--ease-out);
-  }
-}
-@keyframes vl-slide {
-  from {
-    transform: translateX(24px);
-    opacity: 0;
-  }
-}
-@keyframes vl-rise {
-  from {
-    transform: translateY(8px);
-    opacity: 0;
   }
 }
 
@@ -1872,6 +1887,21 @@ button.vl-kpi:hover {
   background: var(--lens);
   border-radius: var(--radius-xs) var(--radius-xs) 0 0;
 }
+.vl-tab:has(.vl-tab-indicator)::after {
+  display: none;
+}
+.vl-tab-indicator {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 2px;
+  background: var(--lens);
+  border-radius: var(--radius-xs) var(--radius-xs) 0 0;
+  pointer-events: none;
+  z-index: 1;
+}
+
 .vl-tab:focus-visible {
   outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
@@ -3032,9 +3062,7 @@ svg circle.vl-thumb-c {
   transform: scale(0.97);
 }
 .vl-btn-primary {
-  box-shadow:
-    var(--highlight-inset),
-    var(--shadow-xs);
+  box-shadow: var(--highlight-inset), var(--shadow-xs);
   font-weight: 600;
 }
 .vl-btn-secondary {

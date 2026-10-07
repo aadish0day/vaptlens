@@ -1,5 +1,6 @@
 import React from "react";
 import { cx } from "@/ui/core";
+import { ValueRoll } from "@/ui/KpiCard";
 
 /* ---------- PipelineStepper ---------- */
 export var STAGES = [
@@ -25,7 +26,10 @@ export function PipelineStepper(props) {
               i === 4 && "is-done",
             )}
           >
-            <span className="vl-step-count">{counts[i]}</span>
+            {/* counts roll when cards move between stages (interior.dev task-steps / value-flash) */}
+            <span className="vl-step-count">
+              <ValueRoll value={counts[i]} />
+            </span>
             <span className="vl-step-label">{s}</span>
           </li>
         );

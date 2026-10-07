@@ -13,11 +13,18 @@ export function Breadcrumbs(props) {
           return (
             <li key={i}>
               {last || !it.onClick ? (
-                <span aria-current={last ? "page" : undefined} className={last ? "is-current" : null}>
+                <span
+                  aria-current={last ? "page" : undefined}
+                  className={last ? "is-current" : null}
+                >
                   {it.label}
                 </span>
               ) : (
-                <button type="button" className="vl-crumb-link" onClick={it.onClick}>
+                <button
+                  type="button"
+                  className="vl-crumb-link"
+                  onClick={it.onClick}
+                >
                   {it.label}
                 </button>
               )}

@@ -6,6 +6,15 @@ import { Icon } from "@/ui/Icon";
 import { SeverityBadge } from "@/ui/SeverityBadge";
 import { ThreatTag } from "@/ui/ThreatTag";
 import { SEV_ORDER, cx } from "@/ui/core";
+import { motion } from "motion/react";
+import { NONE, useReduced } from "@/ui/motion";
+
+/* rows glide to their new place after a sort or when a detail opens above them
+   (interior.dev sortable-table); skipped for long lists where it would cost frames */
+var ROW = { type: "spring", stiffness: 520, damping: 34, mass: 0.45 } as const;
+var STEP = 0.012,
+  STEP_CAP = 12,
+  LAYOUT_MAX = 120;
 
 const h = React.createElement;
 
@@ -95,6 +104,8 @@ export function VulnTable(props) {
     );
   });
   if (props.limit) rows = rows.slice(0, props.limit);
+  var reduced = useReduced();
+  var animRows = !reduced && rows.length <= LAYOUT_MAX;
   /* optional multi-select: props.selectable + props.selected (array of row ids) + props.onSelectChange(ids) */
   var selOn = !!props.selectable,
     sel = {};
@@ -233,12 +244,14 @@ export function VulnTable(props) {
                     }}
                   >
                     {c.label}
-                    <Icon
-                      name={
-                        on && s[0].dir === -1 ? "chevron-up" : "chevron-down"
-                      }
-                      size={12}
-                    />
+                    <motion.span
+                      className="vl-th-arrow"
+                      initial={false}
+                      animate={{ rotate: on && s[0].dir === -1 ? 180 : 0 }}
+                      transition={reduced ? NONE : ROW}
+                    >
+                      <Icon name="chevron-down" size={12} />
+                    </motion.span>
                   </button>
                 </th>
               );
@@ -246,15 +259,21 @@ export function VulnTable(props) {
           </tr>
         </thead>
         <tbody>
-          {rows.map(function (r) {
+          {rows.map(function (r, ri) {
             var open = ex[0] === r.id;
             var cells = h.apply(
               null,
               (
                 [
-                  "tr",
+                  animRows ? motion.tr : "tr",
                   {
                     key: r.id,
+                    layout: animRows ? "position" : undefined,
+                    transition: animRows
+                      ? Object.assign({}, ROW, {
+                          delay: Math.min(ri, STEP_CAP) * STEP,
+                        })
+                      : undefined,
                     className: cx(
                       "vl-tr",
                       open && "is-open",
@@ -349,19 +368,25 @@ export function VulnTable(props) {
             );
             /* one keyed fragment either way: returning a bare row when closed and an array when open made React
                remount the row on every toggle, which threw keyboard focus off the expand button */
-            if (!open) return <React.Fragment key={r.id}>{cells}</React.Fragment>;
+            if (!open)
+              return <React.Fragment key={r.id}>{cells}</React.Fragment>;
             return (
               <React.Fragment key={r.id}>
                 {cells}
-              <tr className="vl-tr-detail">
-                <td colSpan={cols.length + 1 + (selOn ? 1 : 0)}>
-                  {props.renderDetail ? (
-                    props.renderDetail(r)
-                  ) : (
-                    <FindingDetail finding={r} />
-                  )}
-                </td>
-              </tr>
+                <motion.tr
+                  className="vl-tr-detail"
+                  initial={reduced ? false : { opacity: 0, y: -4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={reduced ? NONE : ROW}
+                >
+                  <td colSpan={cols.length + 1 + (selOn ? 1 : 0)}>
+                    {props.renderDetail ? (
+                      props.renderDetail(r)
+                    ) : (
+                      <FindingDetail finding={r} />
+                    )}
+                  </td>
+                </motion.tr>
               </React.Fragment>
             );
           })}

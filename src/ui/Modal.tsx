@@ -1,10 +1,16 @@
 import React from "react";
 import { Icon } from "@/ui/Icon";
 import { useDialog } from "@/ui/core";
+import { AnimatePresence, motion } from "motion/react";
+import { EASE_OUT, BASE, SURFACE, LEAVE, NONE, useReduced } from "@/ui/motion";
 
+/* exit animates when the caller passes open={false}; a caller that unmounts the Modal skips it */
 export function Modal(props) {
-  if (props.open === false) return null;
-  return <ModalInner {...props} />;
+  return (
+    <AnimatePresence>
+      {props.open === false ? null : <ModalInner key="modal" {...props} />}
+    </AnimatePresence>
+  );
 }
 
 export function ModalInner(props) {
@@ -14,14 +20,39 @@ export function ModalInner(props) {
     if (props.onClose) props.onClose();
   }
   var ref = useDialog(close);
+  var reduced = useReduced();
+  /* a press that starts inside the panel and is released on the scrim (text selection) doesn't close */
+  var downOutside = React.useRef(false);
   return (
-    <div
+    <motion.div
       className="vl-overlay vl-overlay-center"
+      initial={{ opacity: 0 }}
+      animate={{
+        opacity: 1,
+        transition: reduced ? NONE : { duration: BASE, ease: EASE_OUT },
+      }}
+      exit={{ opacity: 0, transition: reduced ? NONE : LEAVE }}
+      onPointerDown={function (e) {
+        downOutside.current = e.target === e.currentTarget;
+      }}
       onClick={function (e) {
-        if (e.target === e.currentTarget) close();
+        if (e.target === e.currentTarget && downOutside.current) close();
+        downOutside.current = false;
       }}
     >
-      <div
+      <motion.div
+        initial={reduced ? false : { opacity: 0, scale: 0.97, y: 12 }}
+        animate={{
+          opacity: 1,
+          scale: 1,
+          y: 0,
+          transition: reduced ? NONE : SURFACE,
+        }}
+        exit={
+          reduced
+            ? { opacity: 0, transition: NONE }
+            : { opacity: 0, scale: 0.98, y: 6, transition: LEAVE }
+        }
         ref={ref}
         tabIndex={-1}
         className="vl-modal"
@@ -56,8 +87,8 @@ export function ModalInner(props) {
         {props.footer ? (
           <footer className="vl-modal-foot">{props.footer}</footer>
         ) : null}
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }
 

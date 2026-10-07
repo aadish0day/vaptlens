@@ -26,9 +26,11 @@ export function AuthShell(p) {
         <V.Button
           variant="primary"
           type="submit"
-          disabled={p.disabled || p.busy}
+          disabled={p.disabled}
+          loading={!!p.busy}
+          aria-label={p.busy ? p.busyLabel || "Working…" : undefined}
         >
-          {p.busy ? p.busyLabel || "Working…" : p.cta}
+          {p.cta}
         </V.Button>
         {p.foot || null}
       </form>

@@ -676,7 +676,7 @@ a {
     order: 3;
     width: 100%;
   }
-  
+
   .grid-sla {
     grid-template-columns: 1fr;
   }
@@ -1000,7 +1000,6 @@ a {
   .st-ti {
     display: none;
   }
-  
 }
 
 /* ===== refinement pass ===== */
@@ -1170,7 +1169,6 @@ body {
   }
 }
 @media (max-width: 1023px) {
-  
   .status {
     padding: var(--space-1) var(--space-4);
   }
@@ -1274,8 +1272,11 @@ body {
   transition: height var(--duration-base) var(--ease-standard);
 }
 .react-grid-item {
-  transition: left var(--duration-base) var(--ease-standard), top var(--duration-base) var(--ease-standard),
-    width var(--duration-base) var(--ease-standard), height var(--duration-base) var(--ease-standard);
+  transition:
+    left var(--duration-base) var(--ease-standard),
+    top var(--duration-base) var(--ease-standard),
+    width var(--duration-base) var(--ease-standard),
+    height var(--duration-base) var(--ease-standard);
 }
 .react-grid-item.cssTransforms {
   transition-property: transform, width, height;
@@ -2067,15 +2068,19 @@ select.wb-select {
   height: 4px;
   border-radius: var(--radius-xs);
   background: var(--surface-300);
+  overflow: hidden;
 }
-.pw-bars span.on.s1,
-.pw-bars span.on.s2 {
+.pw-bars b {
+  display: block;
+  height: 100%;
+  transform-origin: left;
   background: var(--status-danger);
+  transition: background-color var(--duration-base);
 }
-.pw-bars span.on.s3 {
+.pw-bars span.s3 b {
   background: var(--status-warn);
 }
-.pw-bars span.on.s4 {
+.pw-bars span.s4 b {
   background: var(--status-ok);
 }
 .me-card {
@@ -2659,7 +2664,15 @@ select.wb-select {
   font: 500 var(--text-xs)/18px var(--font-mono);
   color: var(--ink-subtle);
 }
-.pal-list li.is-on {
+.pal-list li {
+  position: relative;
+  isolation: isolate;
+}
+.pal-hl {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
   background: var(--signal-soft);
 }
 .pal-none {
@@ -3536,28 +3549,12 @@ button.vl-kpi:hover,
   backdrop-filter: blur(2px);
   -webkit-backdrop-filter: blur(2px);
 }
+/* modal, drawer and overlay enter/exit are animated by motion (src/ui/motion.ts) */
 @media (prefers-reduced-motion: no-preference) {
-  .vl-overlay {
-    animation: vl-fade var(--duration-base) var(--ease-out);
-  }
-  .vl-drawer {
-    animation-duration: var(--duration-slow);
-    animation-timing-function: var(--ease-out);
-  }
-  .vl-modal {
-    animation-duration: var(--duration-slow);
-    animation-timing-function: var(--ease-out);
-  }
-  .vl-menu,
   .vl-ms-menu,
   .settings-pop {
     animation: vl-pop var(--duration-base) var(--ease-out);
     transform-origin: top;
-  }
-}
-@keyframes vl-fade {
-  from {
-    opacity: 0;
   }
 }
 @keyframes vl-pop {
@@ -3596,7 +3593,6 @@ button.vl-kpi:hover,
 }
 /* layout rhythm per breakpoint */
 @media (max-width: 479px) {
-  
   .page-title {
     font-size: var(--text-2xl);
     line-height: 26px;
@@ -3632,9 +3628,29 @@ button.vl-kpi:hover,
 }
 
 /* ===== advanced filter (QueryBuilder) on the findings table ===== */
-.adv-filter { padding: var(--space-3); margin-bottom: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--surface-200); }
-.adv-summary { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-bottom: var(--space-2); }
-.vl-btn .vl-count { margin-left: var(--space-1); }
+.adv-filter {
+  padding: var(--space-3);
+  margin-bottom: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--surface-200);
+}
+.adv-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+.vl-btn .vl-count {
+  margin-left: var(--space-1);
+}
 /* keep focused / scrolled-to elements clear of the sticky status bar (WCAG 2.4.11) */
-html { scroll-padding-top: calc(var(--nav-height) + var(--space-4)); }
-@media (max-width: 1023px) { html { scroll-padding-top: calc(var(--nav-height) * 2 + var(--space-4)); } }
+html {
+  scroll-padding-top: calc(var(--nav-height) + var(--space-4));
+}
+@media (max-width: 1023px) {
+  html {
+    scroll-padding-top: calc(var(--nav-height) * 2 + var(--space-4));
+  }
+}

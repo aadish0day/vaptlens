@@ -1,7 +1,15 @@
 import React from "react";
 import { cx } from "@/ui/core";
 
-var LABEL = { ok: "Healthy", warn: "Degraded", danger: "Failing", info: "Info", pending: "Pending", off: "Off", running: "Running" };
+var LABEL = {
+  ok: "Healthy",
+  warn: "Degraded",
+  danger: "Failing",
+  info: "Info",
+  pending: "Pending",
+  off: "Off",
+  running: "Running",
+};
 /* ---------- StatusIndicator (dot + word, never colour alone) ---------- */
 export function StatusIndicator(props) {
   var s = props.status || "info";

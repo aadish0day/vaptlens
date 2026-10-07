@@ -13,6 +13,11 @@ import { Campaigns } from "@/app/views/remediation/Campaigns";
 import { topFixes } from "@/lib/engine";
 import React, { useEffect, useRef, useState } from "react";
 import * as V from "@/ui";
+import { AnimatePresence, LayoutGroup, motion } from "motion/react";
+import { LEAVE, NONE, useReduced } from "@/ui/motion";
+
+/* a moved card flies to its new column, the rest close the gap (interior.dev reorder-list / filter-grid) */
+var CARD = { type: "spring", stiffness: 520, damping: 40, mass: 0.6 } as const;
 
 /* ================= 5. Remediation ================= */
 export function Remediation(ctx) {
@@ -40,6 +45,7 @@ export function Remediation(ctx) {
       window.removeEventListener("vl-remtab", on);
     };
   }, []);
+  var reduced = useReduced();
   var dg = useState(null),
     ov = useState(null);
   /* "Remediated" means fixed: it leaves the active queue and waits for a re-scan to verify (a scan that still finds it reopens it) */
@@ -96,7 +102,9 @@ export function Remediation(ctx) {
     if (!r) return;
     refocus.current = null;
     var sel = function (s2) {
-      return document.querySelector('[data-kmove="' + CSS.escape(r.key + ":" + s2) + '"]') as HTMLButtonElement;
+      return document.querySelector(
+        '[data-kmove="' + CSS.escape(r.key + ":" + s2) + '"]',
+      ) as HTMLButtonElement;
     };
     var b = sel(r.dir > 0 ? "forward" : "back");
     if (!b || b.disabled) b = sel(r.dir > 0 ? "back" : "forward");
@@ -202,116 +210,150 @@ export function Remediation(ctx) {
         </p>
       ) : null}
       {rt[0] !== "Board" ? null : (
-        <section className="kanban">
-          {COLS.map(function (c, ci) {
-            var cards =
-              c === "Remediated"
-                ? pending
-                : a.filter(function (x) {
-                    return (ctx.g(x).status || "To Do") === c;
-                  });
-            return (
-              <div
-                key={c}
-                className={"kcol" + (ov[0] === c ? " kanban-col is-drop" : "")}
-                onDragOver={
-                  ctx.readOnly
-                    ? null
-                    : function (e) {
-                        e.preventDefault();
-                        if (ov[0] !== c) ov[1](c);
-                      }
-                }
-                onDragLeave={function (e) {
-                  if (!e.currentTarget.contains(e.relatedTarget as Node))
-                    ov[1](null);
-                }}
-                onDrop={function (e) {
-                  e.preventDefault();
-                  dropOn(c);
-                }}
-              >
-                <div className="kcol-head">
-                  <span className="vl-card-title">{c}</span>
-                  <span className="kcol-n">{cards.length}</span>
+        <LayoutGroup id="kanban">
+          <section className="kanban">
+            {COLS.map(function (c, ci) {
+              var cards =
+                c === "Remediated"
+                  ? pending
+                  : a.filter(function (x) {
+                      return (ctx.g(x).status || "To Do") === c;
+                    });
+              return (
+                <div
+                  key={c}
+                  className={
+                    "kcol" + (ov[0] === c ? " kanban-col is-drop" : "")
+                  }
+                  onDragOver={
+                    ctx.readOnly
+                      ? null
+                      : function (e) {
+                          e.preventDefault();
+                          if (ov[0] !== c) ov[1](c);
+                        }
+                  }
+                  onDragLeave={function (e) {
+                    if (!e.currentTarget.contains(e.relatedTarget as Node))
+                      ov[1](null);
+                  }}
+                  onDrop={function (e) {
+                    e.preventDefault();
+                    dropOn(c);
+                  }}
+                >
+                  <div className="kcol-head">
+                    <span className="vl-card-title">{c}</span>
+                    <span className="kcol-n">{cards.length}</span>
+                  </div>
+                  <div className="kcol-body">
+                    {cards.length > 60 ? (
+                      <p className="up-help">
+                        {"Showing the 60 highest-priority of " +
+                          cards.length +
+                          ". Filter the dashboard table or use bulk actions for the rest."}
+                      </p>
+                    ) : null}
+                    <AnimatePresence initial={false} mode="popLayout">
+                      {cards.length ? (
+                        cards.slice(0, 60).map(function (x) {
+                          var gg = ctx.g(x);
+                          return (
+                            <motion.div
+                              key={x.key}
+                              layout={!reduced}
+                              layoutId={reduced ? undefined : "kc-" + x.key}
+                              transition={reduced ? NONE : CARD}
+                              initial={
+                                reduced ? false : { opacity: 0, scale: 0.96 }
+                              }
+                              animate={{ opacity: 1, scale: 1 }}
+                              exit={{
+                                opacity: 0,
+                                scale: 0.96,
+                                transition: reduced ? NONE : LEAVE,
+                              }}
+                            >
+                              <V.KanbanCard
+                                severity={x.sev}
+                                title={x.name}
+                                host={hostLabel(x)}
+                                ticket={gg.ticket}
+                                tags={tagsOf(x).slice(0, 2)}
+                                team={gg.team}
+                                onOpen={function () {
+                                  ctx.openFinding(x.key);
+                                }}
+                                dragging={dg[0] === x.key}
+                                dragProps={
+                                  ctx.readOnly
+                                    ? null
+                                    : {
+                                        draggable: true,
+                                        onDragStart: function (e) {
+                                          try {
+                                            e.dataTransfer.setData(
+                                              "text/plain",
+                                              x.key,
+                                            );
+                                            e.dataTransfer.effectAllowed =
+                                              "move";
+                                          } catch (er) {}
+                                          dg[1](x.key);
+                                        },
+                                        onDragEnd: function () {
+                                          dg[1](null);
+                                          ov[1](null);
+                                        },
+                                      }
+                                }
+                                moveId={x.key}
+                                backLabel={
+                                  ci > 0
+                                    ? "Move " + x.name + " to " + COLS[ci - 1]
+                                    : "Move back"
+                                }
+                                forwardLabel={
+                                  ci < 3
+                                    ? "Move " + x.name + " to " + COLS[ci + 1]
+                                    : "Move forward"
+                                }
+                                onBack={
+                                  !ctx.readOnly && ci > 0
+                                    ? function () {
+                                        move(x, -1);
+                                      }
+                                    : undefined
+                                }
+                                onForward={
+                                  !ctx.readOnly && ci < 3
+                                    ? function () {
+                                        move(x, 1);
+                                      }
+                                    : undefined
+                                }
+                              />
+                            </motion.div>
+                          );
+                        })
+                      ) : (
+                        <motion.p
+                          key="empty"
+                          className="kcol-empty"
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          exit={{ opacity: 0, transition: NONE }}
+                        >
+                          No cards
+                        </motion.p>
+                      )}
+                    </AnimatePresence>
+                  </div>
                 </div>
-                <div className="kcol-body">
-                  {cards.length > 60 ? (
-                    <p className="up-help">
-                      {"Showing the 60 highest-priority of " +
-                        cards.length +
-                        ". Filter the dashboard table or use bulk actions for the rest."}
-                    </p>
-                  ) : null}
-                  {cards.length ? (
-                    cards.slice(0, 60).map(function (x) {
-                      var gg = ctx.g(x);
-                      return (
-                        <V.KanbanCard
-                          key={x.id}
-                          severity={x.sev}
-                          title={x.name}
-                          host={hostLabel(x)}
-                          ticket={gg.ticket}
-                          tags={tagsOf(x).slice(0, 2)}
-                          team={gg.team}
-                          onOpen={function () {
-                            ctx.openFinding(x.key);
-                          }}
-                          dragging={dg[0] === x.key}
-                          dragProps={
-                            ctx.readOnly
-                              ? null
-                              : {
-                                  draggable: true,
-                                  onDragStart: function (e) {
-                                    try {
-                                      e.dataTransfer.setData(
-                                        "text/plain",
-                                        x.key,
-                                      );
-                                      e.dataTransfer.effectAllowed = "move";
-                                    } catch (er) {}
-                                    dg[1](x.key);
-                                  },
-                                  onDragEnd: function () {
-                                    dg[1](null);
-                                    ov[1](null);
-                                  },
-                                }
-                          }
-                          moveId={x.key}
-                          backLabel={
-                            ci > 0 ? "Move " + x.name + " to " + COLS[ci - 1] : "Move back"
-                          }
-                          forwardLabel={
-                            ci < 3 ? "Move " + x.name + " to " + COLS[ci + 1] : "Move forward"
-                          }
-                          onBack={
-                            !ctx.readOnly && ci > 0
-                              ? function () {
-                                  move(x, -1);
-                                }
-                              : undefined
-                          }
-                          onForward={
-                            !ctx.readOnly && ci < 3
-                              ? function () {
-                                  move(x, 1);
-                                }
-                              : undefined
-                          }
-                        />
-                      );
-                    })
-                  ) : (
-                    <p className="kcol-empty">No cards</p>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </section>
+              );
+            })}
+          </section>
+        </LayoutGroup>
       )}
       {ad[0] ? (
         <V.Drawer

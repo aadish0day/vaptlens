@@ -1,7 +1,13 @@
 import React from "react";
+import { motion } from "motion/react";
+import { BASE, EASE_OUT, NONE, useReduced } from "@/ui/motion";
+
+/* rows wait DELAY before fading in, so a fast load never flashes a skeleton (interior.dev skeleton-swap) */
+var DELAY = 0.12;
 
 /* ---------- Skeleton ---------- */
 export function Skeleton(props) {
+  var reduced = useReduced();
   if (props.variant === "rows") {
     var n = props.rows || 4,
       out = [];
@@ -29,9 +35,18 @@ export function Skeleton(props) {
         </div>,
       );
     return (
-      <div className="vl-skel-rows" aria-busy="true" aria-label="Loading">
+      <motion.div
+        className="vl-skel-rows"
+        aria-busy="true"
+        aria-label="Loading"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={
+          reduced ? NONE : { duration: BASE, ease: EASE_OUT, delay: DELAY }
+        }
+      >
         {out}
-      </div>
+      </motion.div>
     );
   }
   return (

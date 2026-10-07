@@ -61,8 +61,8 @@ export function UsersModal(p) {
               <V.Button
                 key="s"
                 variant="primary"
+                loading={busy[0]}
                 disabled={
-                  busy[0] ||
                   !form.username ||
                   passwordIssues(form.password, form.username).length > 0
                 }
@@ -89,7 +89,7 @@ export function UsersModal(p) {
                   );
                 }}
               >
-                {busy[0] ? "Creating…" : "Create account"}
+                Create account
               </V.Button>,
             ]
           : [
@@ -100,9 +100,12 @@ export function UsersModal(p) {
                   value={String(idle[0])}
                   onChange={function (e) {
                     var m = +e.target.value;
-                    act(function () {
-                      return AUTH.setIdle(m);
-                    }, "Auto sign-out set to " + m + " min").then(function () {
+                    act(
+                      function () {
+                        return AUTH.setIdle(m);
+                      },
+                      "Auto sign-out set to " + m + " min",
+                    ).then(function () {
                       idle[1](AUTH.idleMinutes);
                     });
                   }}
@@ -149,8 +152,8 @@ export function UsersModal(p) {
           }}
         >
           <code className="vl-mono">{temp[0].password}</code> — give it to the
-          person directly. It's shown only once; they choose their own at sign-in,
-          and their open sessions were ended.
+          person directly. It's shown only once; they choose their own at
+          sign-in, and their open sessions were ended.
         </V.Banner>
       ) : null}
       {form ? (
@@ -281,11 +284,16 @@ export function UsersModal(p) {
                         aria-label={"Role for " + u.username}
                         onChange={function (e) {
                           var r2 = e.target.value;
-                          act(function () {
-                            return AUTH.updateUser(u.id, {
-                              role: r2,
-                            });
-                          }, "Role changed — " + u.username + " must sign in again");
+                          act(
+                            function () {
+                              return AUTH.updateUser(u.id, {
+                                role: r2,
+                              });
+                            },
+                            "Role changed — " +
+                              u.username +
+                              " must sign in again",
+                          );
                         }}
                       >
                         {ROLE_NAMES.map(function (r) {
@@ -310,96 +318,95 @@ export function UsersModal(p) {
                             : "Active"}
                     </td>
                     <td>
-                        <span className="row-wrap">
+                      <span className="row-wrap">
+                        <button
+                          type="button"
+                          className="up-edit"
+                          onClick={function () {
+                            act(function () {
+                              return AUTH.updateUser(u.id, {
+                                resetPassword: true,
+                              });
+                            }, "Password reset").then(function (r) {
+                              if (r && r.tempPassword)
+                                temp[1]({
+                                  username: u.username,
+                                  password: r.tempPassword,
+                                });
+                            });
+                          }}
+                        >
+                          Reset password
+                        </button>
+                        {self ? null : (
+                          <button
+                            type="button"
+                            className="up-edit"
+                            onClick={function () {
+                              act(
+                                function () {
+                                  return AUTH.updateUser(u.id, {
+                                    disabled: !u.disabled,
+                                  });
+                                },
+                                u.disabled
+                                  ? "Account enabled"
+                                  : "Account disabled and signed out",
+                              );
+                            }}
+                          >
+                            {u.disabled ? "Enable" : "Disable"}
+                          </button>
+                        )}
+                        {locked ? (
                           <button
                             type="button"
                             className="up-edit"
                             onClick={function () {
                               act(function () {
                                 return AUTH.updateUser(u.id, {
-                                  resetPassword: true,
+                                  unlock: true,
                                 });
-                              }, "Password reset").then(function (r) {
-                                if (r && r.tempPassword)
-                                  temp[1]({
-                                    username: u.username,
-                                    password: r.tempPassword,
-                                  });
-                              });
+                              }, "Unlocked");
                             }}
                           >
-                            Reset password
+                            Unlock
                           </button>
-                          {self ? null : (
-                            <button
-                              type="button"
-                              className="up-edit"
-                              onClick={function () {
-                                act(
-                                  function () {
-                                    return AUTH.updateUser(u.id, {
-                                      disabled: !u.disabled,
-                                    });
-                                  },
-                                  u.disabled
-                                    ? "Account enabled"
-                                    : "Account disabled and signed out",
-                                );
-                              }}
-                            >
-                              {u.disabled ? "Enable" : "Disable"}
-                            </button>
-                          )}
-                          {locked ? (
-                            <button
-                              type="button"
-                              className="up-edit"
-                              onClick={function () {
-                                act(function () {
-                                  return AUTH.updateUser(u.id, {
-                                    unlock: true,
-                                  });
-                                }, "Unlocked");
-                              }}
-                            >
-                              Unlock
-                            </button>
-                          ) : null}
-                          {self ? null : (
-                            <button
-                              type="button"
-                              aria-label={
-                                (cu[0] === u.id
-                                  ? "Confirm delete "
-                                  : "Delete ") + u.username
+                        ) : null}
+                        {self ? null : (
+                          <button
+                            type="button"
+                            aria-label={
+                              (cu[0] === u.id ? "Confirm delete " : "Delete ") +
+                              u.username
+                            }
+                            title={
+                              cu[0] === u.id
+                                ? "Click again to delete"
+                                : "Delete account"
+                            }
+                            className={
+                              "vl-icon-btn" +
+                              (cu[0] === u.id ? " is-danger" : "")
+                            }
+                            onClick={function () {
+                              if (cu[0] !== u.id) {
+                                cu[1](u.id);
+                                setTimeout(function () {
+                                  cu[1](null);
+                                }, 5000);
+                                return;
                               }
-                              title={
-                                cu[0] === u.id
-                                  ? "Click again to delete"
-                                  : "Delete account"
-                              }
-                              className={
-                                "vl-icon-btn" +
-                                (cu[0] === u.id ? " is-danger" : "")
-                              }
-                              onClick={function () {
-                                if (cu[0] !== u.id) {
-                                  cu[1](u.id);
-                                  setTimeout(function () {
-                                    cu[1](null);
-                                  }, 5000);
-                                  return;
-                                }
-                                cu[1](null);
-                                act(function () {
-                                  return AUTH.removeUser(u.id);
-                                }, "Account deleted");
-                              }}
-                            >
-                              <V.Icon name="x" size={14} />
-                            </button>
-                          )}
-                        </span>
+                              cu[1](null);
+                              act(function () {
+                                return AUTH.removeUser(u.id);
+                              }, "Account deleted");
+                            }}
+                          >
+                            <V.Icon name="x" size={14} />
+                          </button>
+                        )}
+                      </span>
                     </td>
                   </tr>
                 );

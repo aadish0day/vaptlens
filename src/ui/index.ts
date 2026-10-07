@@ -76,6 +76,7 @@ export { Spinner } from "@/ui/Spinner";
 export { StatusIndicator } from "@/ui/StatusIndicator";
 export { Avatar, AvatarGroup } from "@/ui/Avatar";
 export { CopyButton } from "@/ui/CopyButton";
+export { HoldToConfirm, useHoldToConfirm } from "@/ui/HoldToConfirm";
 export { KeyValueList } from "@/ui/KeyValueList";
 export { Wizard } from "@/ui/Wizard";
 export { QueryBuilder, QB_OPS, qbMatch, qbTest, qbSummary, qbComplete } from "@/ui/QueryBuilder";

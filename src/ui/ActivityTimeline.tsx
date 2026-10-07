@@ -5,10 +5,18 @@ import { Avatar } from "@/ui/Avatar";
 /* ---------- ActivityTimeline (who did what, when; grouped by day) ---------- */
 /* items: [{ id, at (ISO), actor, text, tone? ("ok"|"warn"|"danger"|"info") , detail? }] */
 export function ActivityTimeline(props) {
-  var items = (props.items || []).slice().sort(function (a, b) { return a.at < b.at ? 1 : -1; });
+  var items = (props.items || []).slice().sort(function (a, b) {
+    return a.at < b.at ? 1 : -1;
+  });
   var groups = [];
-  items.forEach(function (it) { var d = String(it.at).slice(0, 10), g = groups[groups.length - 1]; if (!g || g.day !== d) groups.push(g = { day: d, items: [] }); g.items.push(it); });
-  if (!items.length) return <p className="vl-tl-empty">{props.empty || "No activity yet."}</p>;
+  items.forEach(function (it) {
+    var d = String(it.at).slice(0, 10),
+      g = groups[groups.length - 1];
+    if (!g || g.day !== d) groups.push((g = { day: d, items: [] }));
+    g.items.push(it);
+  });
+  if (!items.length)
+    return <p className="vl-tl-empty">{props.empty || "No activity yet."}</p>;
   return (
     <div className="vl-tl">
       {groups.map(function (g) {
@@ -18,14 +26,24 @@ export function ActivityTimeline(props) {
             <ol>
               {g.items.map(function (it, i) {
                 return (
-                  <li key={it.id || i} className={cx("vl-tl-item", it.tone && "is-" + it.tone)}>
+                  <li
+                    key={it.id || i}
+                    className={cx("vl-tl-item", it.tone && "is-" + it.tone)}
+                  >
                     <span className="vl-tl-dot" aria-hidden="true" />
                     {it.actor ? <Avatar name={it.actor} size={22} /> : null}
                     <div className="vl-tl-main">
-                      <div className="vl-tl-text">{it.actor ? <b>{it.actor} </b> : null}{it.text}</div>
-                      {it.detail ? <div className="vl-tl-detail">{it.detail}</div> : null}
+                      <div className="vl-tl-text">
+                        {it.actor ? <b>{it.actor} </b> : null}
+                        {it.text}
+                      </div>
+                      {it.detail ? (
+                        <div className="vl-tl-detail">{it.detail}</div>
+                      ) : null}
                     </div>
-                    <time className="vl-tl-time" dateTime={it.at}>{String(it.at).slice(11, 16)}</time>
+                    <time className="vl-tl-time" dateTime={it.at}>
+                      {String(it.at).slice(11, 16)}
+                    </time>
                   </li>
                 );
               })}
