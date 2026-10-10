@@ -81,7 +81,18 @@ export { KeyValueList } from "@/ui/KeyValueList";
 export { Wizard } from "@/ui/Wizard";
 export { QueryBuilder, QB_OPS, qbMatch, qbTest, qbSummary, qbComplete } from "@/ui/QueryBuilder";
 export { Gauge } from "@/ui/Gauge";
-export { JsonViewer } from "@/ui/JsonViewer";
+export {
+  JsonViewer,
+  JsonViewerTree,
+  JsonViewerNode,
+  JsonViewerToggle,
+  JsonViewerKey,
+  JsonViewerValue,
+  JsonViewerCopy,
+  JsonViewerExpandAll,
+  JsonViewerCollapseAll,
+  useJsonViewer,
+} from "@/ui/JsonViewer";
 export { DiffView, lineDiff } from "@/ui/DiffView";
 export { Kbd } from "@/ui/Kbd";
 export { FunnelChart } from "@/ui/FunnelChart";

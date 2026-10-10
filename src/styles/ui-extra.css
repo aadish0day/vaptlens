@@ -1079,23 +1079,59 @@
 .vl-json-toggle {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-1);
+  justify-content: center;
+  width: 14px;
+  height: 14px;
   border: 0;
   background: none;
   padding: 0;
-  color: var(--ink);
+  color: var(--ink-muted);
   font: inherit;
   cursor: pointer;
+  user-select: none;
 }
 .vl-json-toggle:focus-visible {
   outline: 2px solid var(--focus-ring);
 }
+.vl-json-toggle svg {
+  transition: transform 140ms ease;
+}
+.vl-json-toggle[data-state="open"] svg {
+  transform: rotate(90deg);
+}
+.vl-json-toggle.is-hidden {
+  visibility: hidden;
+}
 .vl-json-k {
+  color: var(--ink);
+  font-weight: 500;
+}
+.vl-json-sum {
   color: var(--ink-muted);
 }
-.vl-json-sum,
-.vl-json-more {
+.vl-json-count {
   color: var(--ink-subtle);
+  padding: 0 2px;
+}
+.vl-json-more {
+  display: inline-block;
+  margin: 0 4px;
+  padding: 0 4px;
+  border-radius: 3px;
+  background: var(--surface-200);
+  border: 1px solid var(--border);
+  color: var(--ink-muted);
+  font-size: var(--text-2xs);
+  line-height: 14px;
+  cursor: pointer;
+}
+.vl-json-more:hover {
+  color: var(--ink);
+  border-color: var(--ink-muted);
+}
+.vl-json-v.is-circular {
+  color: var(--chart-5);
+  font-style: italic;
 }
 .vl-json-v.is-str {
   color: var(--chart-2);
