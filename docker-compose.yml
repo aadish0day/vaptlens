@@ -5,7 +5,7 @@ services:
     image: vaptlens:latest
     # loopback only by default. To let others on your network sign in, set in .env:
     #   BIND_ADDR=0.0.0.0  and  ALLOWED_HOSTS=<the hostname or IP they type>  (and put HTTPS in front)
-    ports: ["${BIND_ADDR:-127.0.0.1}:8080:8080"]
+    ports: ["${BIND_ADDR:-127.0.0.1}:8080:80"]
     restart: unless-stopped
     read_only: true
     tmpfs: ["/var/cache/nginx", "/var/run", "/tmp"]

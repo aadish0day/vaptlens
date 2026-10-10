@@ -17,16 +17,21 @@
     "selftest": "node scripts/selftest.mjs"
   },
   "dependencies": {
+    "@radix-ui/react-slot": "^1.4.0",
+    "class-variance-authority": "^0.7.1",
     "docx": "8.5.0",
     "html2canvas": "1.4.1",
     "jspdf": "^4.2.1",
     "jszip": "3.10.1",
+    "lucide-react": "^1.55.0",
     "motion": "^12.43.0",
+    "next-themes": "^0.4.6",
     "papaparse": "5.4.1",
     "pg": "^8.23.1",
     "react": "18.3.1",
     "react-dom": "18.3.1",
-    "react-grid-layout": "1.4.4"
+    "react-grid-layout": "1.4.4",
+    "shiki": "^4.5.0"
   },
   "devDependencies": {
     "@types/node": "^20.14.0",
