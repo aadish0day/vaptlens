@@ -374,16 +374,6 @@ export var IDB = {
   },
 };
 
-export function sha256Hex(str: string) {
-  return crypto.subtle.digest("SHA-256", new TextEncoder().encode(str)).then(function (h) {
-    return Array.prototype.map
-      .call(new Uint8Array(h), function (b: number) {
-        return b.toString(16).padStart(2, "0");
-      })
-      .join("");
-  });
-}
-
 /* read a File as text, un-gzipping .gz with the browser's DecompressionStream */
 export function readFileText(f: File): Promise<string> {
   if (/\.gz$/i.test(f.name) && (window as any).DecompressionStream)

@@ -1,5 +1,6 @@
 import { SEV_LABEL_G } from "@/lib/data";
 import React from "react";
+import { ChartLegend } from "@/ui/ChartLegend";
 
 /* ---------- BI engine: dimensions, measures, aggregate(), widget rendering ---------- */
 export var DIMS = [
@@ -421,7 +422,7 @@ export function GroupedBarChart(props) {
           );
         })}
       </svg>
-      <window.VAPTLens.ChartLegend
+      <ChartLegend
         items={series.map(function (s, k) {
           return {
             label: s.label,
