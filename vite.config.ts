@@ -8,6 +8,9 @@ export default defineConfig({
   plugins: [react({ jsxRuntime: "classic" })],
   resolve: { alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) } },
   server: {
+    host: "0.0.0.0",
+    port: 5173,
+    allowedHosts: true,
     proxy: { "/api": process.env.SYNC_URL || "http://localhost:8787" },
   },
   build: {
