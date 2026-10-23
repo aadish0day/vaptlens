@@ -15,7 +15,7 @@ export default defineConfig({
   },
   build: {
     target: "es2019",
-    sourcemap: true,
+    sourcemap: process.env.SOURCEMAP === "true",
     chunkSizeWarningLimit: 1500,
     rollupOptions: {
       /* "/" is the landing page (src/landing/); the app is its own page at /app/ */

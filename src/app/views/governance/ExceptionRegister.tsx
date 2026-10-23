@@ -90,12 +90,15 @@ export function ExceptionRegister(p) {
             }) || {}
           ).f || {};
         var d = Math.min(90, (pol.maxDays || {})[f.sev] || 90);
-        if (mustRequest(ctx, f))
+        if (mustRequest(ctx, f)) {
+          var isCurrent = g0.state === "accepted" && g0.until && g0.until >= localDay();
           return {
-            state: "requested",
+            state: isCurrent ? "accepted" : "requested",
+            pendingRenewal: isCurrent ? true : null,
             requestedState: "accepted",
             requestedBy: ctx.me.username,
-            until: addDays(localDay(), d),
+            requestedUntil: addDays(localDay(), d),
+            until: isCurrent ? g0.until : addDays(localDay(), d),
             at: nowIso(),
             by: ctx.me.username,
             renewals: (g0.renewals || 0) + 1,
@@ -103,8 +106,9 @@ export function ExceptionRegister(p) {
               (g0.reason ? g0.reason + " · " : "") +
               "Renewal requested: " +
               why[0].trim(),
-            approvedBy: null,
+            approvedBy: isCurrent ? g0.approvedBy : null,
           };
+        }
         return {
           state: "accepted",
           until: addDays(localDay(), d),

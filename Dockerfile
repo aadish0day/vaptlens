@@ -23,7 +23,8 @@ FROM node:24-alpine AS sync
 WORKDIR /app
 RUN npm install --no-save --no-audit --no-fund pg@8.23.1
 COPY --chmod=0444 server/server.mjs server/kev-bundled.json ./
-RUN mkdir /data && chown node:node /data
+COPY --chmod=0555 scripts/backup.mjs ./scripts/backup.mjs
+RUN mkdir -p /data/backups && chown -R node:node /data
 USER node
 EXPOSE 8787
 CMD ["node", "server.mjs"]

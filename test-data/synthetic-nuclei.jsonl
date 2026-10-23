@@ -1,0 +1,3 @@
+{"template-id":"cve-2021-44228","info":{"name":"Apache Log4j RCE","severity":"critical","classification":{"cve-id":["CVE-2021-44228"],"cvss-score":10.0}},"host":"10.0.0.1:8080","matched-at":"http://10.0.0.1:8080/login"}
+CORRUPTED_LINE_FROM_PROXY_FAILURE_OR_PARTIAL_WRITE
+{"template-id":"git-config","info":{"name":"Git Config Exposure","severity":"medium"},"host":"https://app.internal","matched-at":"https://app.internal/.git/config"}

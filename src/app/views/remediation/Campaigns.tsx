@@ -173,14 +173,16 @@ export function Campaigns(p) {
                     <span className="camp-pct">{s.pct + "%"}</span>
                     {s.overdue ? (
                       <V.SlaPill status="breached" days={days(c.due, AS_OF)} />
-                    ) : s.pct === 100 ? (
+                    ) : s.pct === 100 || !s.open.length ? (
                       <V.DiffBadge kind="fixed" label="Complete" />
                     ) : (
                       <V.SlaPill
                         status={
-                          c.due && days(AS_OF, c.due) <= 7 ? "at-risk" : "met"
+                          c.due && days(AS_OF, c.due) >= 0 && days(AS_OF, c.due) <= 7
+                            ? "at-risk"
+                            : "met"
                         }
-                        days={c.due ? days(AS_OF, c.due) : undefined}
+                        days={c.due ? Math.max(0, days(AS_OF, c.due)) : undefined}
                       />
                     )}
                   </div>

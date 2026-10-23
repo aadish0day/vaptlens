@@ -314,8 +314,8 @@ export function cvss4Score(pv) {
     VI: "HLN",
     VA: "HLN",
     SC: "HLN",
-    SI: "HLNS",
-    SA: "HLNS",
+    SI: "HLN",
+    SA: "HLN",
   };
   for (var b in base) if (!sel[b] || base[b].indexOf(sel[b]) < 0) return null;
   function m(k) {
@@ -347,7 +347,7 @@ export function cvss4Score(pv) {
         ? 1
         : 2;
   var eq4 =
-    m("MSI") === "S" || m("MSA") === "S" || m("SI") === "S" || m("SA") === "S"
+    m("SI") === "S" || m("SA") === "S"
       ? 0
       : m("SC") === "H" || m("SI") === "H" || m("SA") === "H"
         ? 1
@@ -449,14 +449,16 @@ export function cvss4Score(pv) {
   add(value - s4, c4, CVSS4_MAXS.eq4[eq4] * st);
   if (!isNaN(value - s5)) n++;
   value -= n ? tot / n : 0;
-  return Math.round(Math.max(0, Math.min(10, value)) * 10) / 10;
+  var out = Math.round(Math.max(0, Math.min(10, value)) * 10) / 10;
+  return isNaN(out) ? null : out;
 }
 /* any supported vector → base score (v4.0, v3.x) */
 
 /* any supported vector → base score (v4.0, v3.x) */
 export function vectorScore(pv) {
   if (!pv) return null;
-  return pv.version === "4.0" ? cvss4Score(pv) : cvss3Score(pv);
+  var sc = pv.version === "4.0" ? cvss4Score(pv) : cvss3Score(pv);
+  return sc != null && !isNaN(sc) ? sc : null;
 }
 
 export function sevFromScore(x) {
@@ -575,6 +577,7 @@ export function ssvcOf(f, asset) {
         : f.exploitable || (f.epss || 0) >= 0.1 || f.zeroday
           ? "poc"
           : "none";
+  asset = asset || {};
   var auto = vecAutomatable(pv);
   if (auto == null)
     auto =
@@ -605,8 +608,9 @@ export function ssvcOf(f, asset) {
     (auto ? "yes" : "no") +
     "|" +
     (total ? "total" : "partial");
+  var treeRow = SSVC_TREE[k] || ["Track", "Attend", "Act"];
   return {
-    decision: SSVC_TREE[k][mission],
+    decision: treeRow[mission] || "Track",
     exploitation: exploitation,
     automatable: auto ? "yes" : "no",
     impact: total ? "total" : "partial",
@@ -623,10 +627,12 @@ export function riskModel(f, asset) {
       risk: 0,
       parts: null,
     };
-  var S = (f.cvss > 0 ? f.cvss : DEFAULT_CVSS[f.sev]) / 10;
+  var S = ((f.cvss > 0 ? f.cvss : DEFAULT_CVSS[f.sev]) || 0) / 10;
+  var epssVal =
+    typeof f.epss === "number" && isFinite(f.epss) ? f.epss : 0;
   var L = Math.max(
     0.05,
-    f.epss || 0,
+    epssVal,
     f.kev ? 1 : 0,
     f.zeroday ? 0.6 : 0,
     f.exploitable ? 0.35 : 0,
@@ -663,7 +669,7 @@ export function riskModel(f, asset) {
 export function threatIndex(active) {
   var top = active
     .map(function (x) {
-      return x.risk;
+      return typeof x.risk === "number" && isFinite(x.risk) ? x.risk : 0;
     })
     .sort(function (a, b) {
       return b - a;
@@ -934,13 +940,17 @@ export function enrichWith(f, env) {
     0,
     days(f.slaStart || f.firstSeen, f.fixedAt || AS_OF) - f.pausedDays,
   );
-  f.daysLeft = f.slaDays - clock;
+  if (isNaN(clock)) clock = 0;
+  f.daysLeft = isNaN(f.slaDays - clock) ? 0 : f.slaDays - clock;
   /* CISA BOD 22-01: a KEV due date overrides a longer internal SLA */
   if (f.kevDue && open) {
-    var kd = days(AS_OF, f.kevDue);
-    if (kd < f.daysLeft) {
-      f.daysLeft = kd;
-      f.slaSource = "KEV due " + f.kevDue;
+    var disc = f.slaStart || f.firstSeen;
+    if (!disc || disc <= f.kevDue) {
+      var kd = days(AS_OF, f.kevDue);
+      if (kd < f.daysLeft) {
+        f.daysLeft = kd;
+        f.slaSource = "KEV due " + f.kevDue;
+      }
     }
   }
   var exempt = env.exempt && env.exempt(f);
@@ -1047,10 +1057,14 @@ export function runEngine(raw, batches, env?) {
         tools: [x.tool],
       });
     else {
-      /* same issue twice in one scan (two scanners) → one finding */
       if (SEV.indexOf(x.sev) < SEV.indexOf(ex.sev)) ex.sev = x.sev;
-      ex.cvss = Math.max(ex.cvss || 0, x.cvss || 0);
-      ex.vector = ex.vector || x.vector;
+      if ((x.cvss || 0) > (ex.cvss || 0)) {
+        ex.cvss = x.cvss;
+        if (x.vector) ex.vector = x.vector;
+      } else {
+        ex.cvss = Math.max(ex.cvss || 0, x.cvss || 0);
+        ex.vector = ex.vector || x.vector;
+      }
       ex.cves = uniqA((ex.cves || []).concat(x.cves || []));
       ex.cwe = uniqA((ex.cwe || []).concat(x.cwe || []));
       if (ex.tools.indexOf(x.tool) < 0) ex.tools.push(x.tool);
@@ -1304,7 +1318,7 @@ export function metricsOf(eng, gov, sla?, opt?) {
     (x.cycles || []).forEach(function (c) {
       cyc.push({
         sev: x.sev,
-        days: Math.max(0, days(c.start, c.end)),
+        days: Math.max(0, days(c.start, c.end) - (c.pausedDays || 0)),
         sla: slaFor(x.sev, tier),
       });
     });
@@ -1433,17 +1447,22 @@ export function metricsOf(eng, gov, sla?, opt?) {
   open.forEach(function (x) {
     openKeys[x.key] = 1;
   });
-  var openBreached = eng.data.filter(function (x) {
-    return (
-      x.batch === latest &&
-      x.lifecycle !== "Fixed" &&
-      x.breached &&
-      openKeys[x.key]
-    );
+  var latestByKey = {};
+  eng.data.forEach(function (x) {
+    if (openKeys[x.key]) {
+      var prev = latestByKey[x.key];
+      if (!prev || x.batch >= prev.batch) {
+        latestByKey[x.key] = x;
+      }
+    }
+  });
+  var openBreached = Object.keys(latestByKey).filter(function (k) {
+    var x = latestByKey[k];
+    return x.lifecycle !== "Fixed" && x.breached;
   }).length;
-  var kevOver = eng.data.filter(function (x) {
+  var kevOver = Object.keys(latestByKey).filter(function (k) {
+    var x = latestByKey[k];
     return (
-      x.batch === latest &&
       x.lifecycle !== "Fixed" &&
       x.kevDue &&
       x.kevDue < AS_OF &&
@@ -1470,6 +1489,8 @@ export function metricsOf(eng, gov, sla?, opt?) {
       ? Math.round((100 * within) / cyc.length)
       : null,
     openBreached: openBreached,
+    breached: openBreached,
+    withinSla: within,
     recurrence: everFixed
       ? Math.round(
           (100 *
@@ -2571,12 +2592,13 @@ export function reEsc(s) {
 /* does statement v apply to finding f? CVE must match; a named product must appear in the finding (host, title,
    rule or description); a versioned product must not contradict a different version named next to it */
 export function vexMatches(v, f) {
+  var vCve = String((v && v.cve) || "").toUpperCase();
   if (
     (f.cves || [])
       .map(function (c) {
         return String(c).toUpperCase();
       })
-      .indexOf(v.cve) < 0
+      .indexOf(vCve) < 0
   )
     return false;
   var pr = vexProduct(v.product);

@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "CodeQL",
+          "rules": [
+            {
+              "id": "js/sql-injection",
+              "properties": {
+                "security-severity": "9.3",
+                "cwe": ["CWE-89"]
+              },
+              "shortDescription": { "text": "Database query built from user-controlled sources" }
+            },
+            {
+              "id": "js/informational-audit-metric",
+              "properties": {
+                "security-severity": "0.0"
+              },
+              "shortDescription": { "text": "Informational metric flagged with level warning" }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "js/sql-injection",
+          "level": "error",
+          "message": { "text": "Untrusted input reaches SQL query." },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": { "uri": "server/db.js" },
+                "region": { "startLine": 45 }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "js/informational-audit-metric",
+          "level": "warning",
+          "message": { "text": "Audit metric is 0.0 severity but level is warning." },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": { "uri": "server/metric.js" },
+                "region": { "startLine": 12 }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

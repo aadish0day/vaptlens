@@ -228,7 +228,13 @@ export function Frameworks(p) {
                           <span className="vl-mono diff-host">
                             {hostLabel(x) +
                               " · " +
-                              days(x.slaStart || x.firstSeen, AS_OF) +
+                              (x.ageDays != null
+                                ? Math.max(0, x.ageDays - (x.pausedDays || 0))
+                                : Math.max(
+                                    0,
+                                    days(x.slaStart || x.firstSeen, AS_OF) -
+                                      (x.pausedDays || 0),
+                                  )) +
                               "d open"}
                           </span>
                         </div>

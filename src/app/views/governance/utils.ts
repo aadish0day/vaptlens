@@ -23,9 +23,11 @@ export function govFacts(ctx) {
     pol = ctx.policy || {};
   function olderThan(sevs, d) {
     return a.filter(function (x) {
-      return (
-        sevs.indexOf(x.sev) >= 0 && days(x.slaStart || x.firstSeen, AS_OF) > d
-      );
+      var clock =
+        x.ageDays != null
+          ? x.ageDays - (x.pausedDays || 0)
+          : days(x.slaStart || x.firstSeen, AS_OF) - (x.pausedDays || 0);
+      return sevs.indexOf(x.sev) >= 0 && clock > d;
     });
   }
   var lastScanBy = {};
@@ -66,12 +68,13 @@ export function govFacts(ctx) {
       })
       .sort()
       .pop() || null;
-  var decisions = Object.keys(ctx.gov).filter(function (k) {
-    var g0 = ctx.gov[k];
+  var gov = ctx.gov || {};
+  var decisions = Object.keys(gov).filter(function (k) {
+    var g0 = gov[k];
     return g0 && (g0.state === "accepted" || g0.state === "fp");
   });
   var undocumented = decisions.filter(function (k) {
-    var g0 = ctx.gov[k];
+    var g0 = gov[k];
     return (
       !g0.reason ||
       !(g0.approvedBy || g0.by) ||
@@ -79,8 +82,8 @@ export function govFacts(ctx) {
     );
   });
   var tooLong = decisions.filter(function (k) {
-    var g0 = ctx.gov[k],
-      f = ctx.eng.findings[k] || {};
+    var g0 = gov[k],
+      f = (ctx.eng && ctx.eng.findings ? ctx.eng.findings[k] : null) || {};
     return (
       g0.state === "accepted" &&
       g0.until &&
@@ -88,8 +91,8 @@ export function govFacts(ctx) {
       days(localDay(g0.at), g0.until) > ((pol.maxDays || {})[f.sev] || 365)
     );
   });
-  var expired = Object.keys(ctx.gov).filter(function (k) {
-    return ctx.stateOf(k) === "expired";
+  var expired = Object.keys(gov).filter(function (k) {
+    return ctx.stateOf ? ctx.stateOf(k) === "expired" : false;
   });
   var feeds = !!(ctx.intel && ctx.intel.kevCount),
     epss = !!(ctx.intel && ctx.intel.epssCount);

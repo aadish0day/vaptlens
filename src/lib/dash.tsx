@@ -203,23 +203,25 @@ export function matchDim(f, key, val, ctx) {
 
 export function computeMeasure(rows, m) {
   if (!rows.length) return 0;
-  if (m === "avgCvss")
+  if (m === "avgCvss") {
+    var withCvss = rows.filter(function (r) {
+      return r.cvss != null;
+    });
+    if (!withCvss.length) return 0;
     return (
       Math.round(
-        (rows.reduce(function (a, r) {
+        (withCvss.reduce(function (a, r) {
           return a + (r.cvss || 0);
         }, 0) /
-          rows.length) *
+          withCvss.length) *
           10,
       ) / 10
     );
+  }
   if (m === "maxCvss")
-    return Math.max.apply(
-      null,
-      rows.map(function (r) {
-        return r.cvss || 0;
-      }),
-    );
+    return rows.reduce(function (m, r) {
+      return Math.max(m, r.cvss || 0);
+    }, 0);
   if (m === "distinctHosts")
     return uniqG(
       rows.map(function (r) {

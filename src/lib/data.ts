@@ -42,7 +42,8 @@ export var _dms = {};
 export function _ms(d) {
   var v = _dms[d];
   if (v === undefined) {
-    v = _dms[d] = new Date(d).getTime();
+    var t = new Date(d).getTime();
+    v = _dms[d] = isNaN(t) ? 0 : t;
   }
   return v;
 }
@@ -226,7 +227,7 @@ export function isRansom(f) {
 }
 
 export function effortOf(f) {
-  var n = f.name.toLowerCase();
+  var n = String((f && f.name) || "").toLowerCase();
   if (/header|cookie|banner/.test(n)) return 2.2 + ((Number(f.cvss) || 0) % 1) * 0.6;
   if (/default|password|unauthenticated access|null session/.test(n))
     return 2.8;
@@ -545,12 +546,12 @@ export var TOKENS = {
 
 export function detectTool(headers) {
   var H = headers.map(function (x) {
-      return x.trim();
+      return String(x || "").trim().toLowerCase();
     }),
     best = null;
   PRESETS.forEach(function (p) {
     var m = p.sig.filter(function (s) {
-      return H.indexOf(s) >= 0;
+      return H.indexOf(s.toLowerCase()) >= 0;
     }).length;
     if (m >= 2 && (!best || m > best.matched))
       best = {
@@ -644,18 +645,17 @@ export function normSev(raw, cvss?) {
   var s = String(raw == null ? "" : raw)
     .trim()
     .toLowerCase();
-  if (/^(crit|urgent|emergency|severe|p0\b|p1\b|s1\b)/.test(s)) return "critical";
+  if (/^(crit|urgent|emergency|severe|fatal|blocker|p0\b|p1\b|s1\b)/.test(s)) return "critical";
   if (/^(high|important|serious|error|major|p2\b|s2\b)/.test(s)) return "high";
   if (/^(med|moderate|warn|p3\b|s3\b)/.test(s)) return "medium";
   if (/^(low|minor|note|p4\b|s4\b)/.test(s)) return "low";
-  if (/^(info|none|log|p5\b|s5\b)/.test(s) || s === "0") return "info";
+  if (/^(info|none|log|negligible|trivial|p5\b|s5\b)/.test(s) || s === "0") return "info";
 
   var c = parseFloat(cvss);
-  /* numbers: "4.0", "7", "10.0". Decimals and values above 5 are CVSS-like; whole numbers 1–5 are a 1–5 scale
-     unless they equal the CVSS column */
+  /* numbers: "4.0", "7", "10.0". Decimals and values above 5 are CVSS-like; whole numbers 1–5 are a 1–5 scale */
   if (/^\d+(\.\d+)?$/.test(s)) {
     var n = parseFloat(s);
-    if (n > 5 || s.indexOf(".") >= 0 || n === c) {
+    if (n > 5 || s.indexOf(".") >= 0) {
       if (n >= 9) return "critical";
       if (n >= 7) return "high";
       if (n >= 4) return "medium";

@@ -1,6 +1,7 @@
 import { myPrefsSeen, pausedDaysOf } from "@/app/appUtils";
 import { Assistant } from "@/app/assistant/Assistant";
 import { DEFAULT_RULES } from "@/app/automation/utils";
+import { ErrorBoundary } from "@/app/components/ErrorBoundary";
 import { FindingDrawer } from "@/app/components/FindingDrawer";
 import { Inbox } from "@/app/components/Inbox";
 import { Palette } from "@/app/components/Palette";
@@ -1639,12 +1640,24 @@ export function App(props) {
           return {
             state: g0.requestedState || "accepted",
             requestedState: null,
+            pendingRenewal: null,
+            until: g0.requestedUntil || g0.until,
             approvedBy: me.username,
             approvedAt: nowIso(),
             rejectedBy: null,
             rejectedAt: null,
             rejectReason: null,
           };
+        if (g0.pendingRenewal && g0.until && g0.until >= localDay()) {
+          return {
+            pendingRenewal: null,
+            requestedState: null,
+            requestedUntil: null,
+            rejectedBy: me.username,
+            rejectedAt: nowIso(),
+            rejectReason: reason || "",
+          };
+        }
         var p0: any = {
           state: null,
           requestedState: null,
@@ -2365,7 +2378,39 @@ export function App(props) {
               Skip to findings
             </button>
           ) : null}
-          {batches.length ? <View {...ctx} /> : <NoData {...ctx} />}
+          <ErrorBoundary
+            fallback={
+              <div
+                className="view-crash"
+                style={{ padding: "3rem", textAlign: "center" }}
+              >
+                <h3 style={{ marginBottom: "0.5rem" }}>
+                  This view encountered an unexpected error
+                </h3>
+                <p
+                  style={{
+                    color: "var(--muted)",
+                    marginBottom: "1.5rem",
+                    fontSize: "0.875rem",
+                  }}
+                >
+                  Your workspace data remains intact on the server. You can
+                  switch to another screen or reload this view.
+                </p>
+                <V.Button
+                  size="sm"
+                  variant="primary"
+                  onClick={function () {
+                    location.reload();
+                  }}
+                >
+                  Reload view
+                </V.Button>
+              </div>
+            }
+          >
+            {batches.length ? <View {...ctx} /> : <NoData {...ctx} />}
+          </ErrorBoundary>
         </main>
       </div>
       {hostDrawer ? (

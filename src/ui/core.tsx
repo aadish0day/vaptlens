@@ -154,13 +154,23 @@ export function useDialog(onClose) {
       }
       if (e.key !== "Tab") return;
       var list = focusables();
-      if (!list.length) return;
+      if (!list.length) {
+        e.preventDefault();
+        if (el) el.focus();
+        return;
+      }
       var first = list[0],
         last = list[list.length - 1];
-      if (e.shiftKey && document.activeElement === first) {
+      if (
+        e.shiftKey &&
+        (document.activeElement === first || !el.contains(document.activeElement))
+      ) {
         e.preventDefault();
         last.focus();
-      } else if (!e.shiftKey && document.activeElement === last) {
+      } else if (
+        !e.shiftKey &&
+        (document.activeElement === last || !el.contains(document.activeElement))
+      ) {
         e.preventDefault();
         first.focus();
       }

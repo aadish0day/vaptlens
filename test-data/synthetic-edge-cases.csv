@@ -1,0 +1,6 @@
+Plugin ID,CVE,CVSS,Risk,Host,Protocol,Port,Plugin Name,Description,Solution,CWE
+1001,CVE-2021-44228,10.0,Critical,10.0.0.1:8080,tcp,8080,"Apache Log4j JNDI RCE","=cmd|' /C calc'!A0","Upgrade library",CWE-502
+1002,CVE-2020-1472,4.0,4,10.0.0.2,tcp,445,"Netlogon Vulnerability"," =1+1 formula test","Patch Active Directory",89
+1003,,0.0,None,https://[fe80::1%eth0]:8443,tcp,8443,"SSL Certificate Information","IPv6 zone identifier test","None required",79
+1004,"CVE-2022-0001; CVE-2022-0002",7.5,High,app.corp.internal:8080,tcp,8080,"Multiple CVE Semicolon Test","Description with multiple CVEs","Apply update",CWE-20
+1005,CVE-2023-9999,3.5,Negligible,10.0.0.5,tcp,80,"Minor Package Warning","Distribution package negligible risk","Informational only",CWE-200

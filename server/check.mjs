@@ -330,11 +330,59 @@ assert.deepEqual((await lead("/api/evidence/Default/a%7C1")).data, {
   data: [],
   version: 0,
 });
+const samplePng =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+
+/* rejecting SVG and blob: URLs */
 assert.equal(
   (
     await lead("/api/evidence/Default/a%7C1", {
       method: "PUT",
-      body: { data: [{ img: "x" }], version: 0 },
+      body: {
+        data: [{ name: "evil.svg", url: "data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=" }],
+        version: 0,
+      },
+    })
+  ).status,
+  400,
+  "rejects SVG data URLs",
+);
+assert.equal(
+  (
+    await lead("/api/evidence/Default/a%7C1", {
+      method: "PUT",
+      body: {
+        data: [{ name: "blob.png", url: "blob:http://localhost/1234" }],
+        version: 0,
+      },
+    })
+  ).status,
+  400,
+  "rejects blob: URLs",
+);
+assert.equal(
+  (
+    await lead("/api/evidence/Default/a%7C1", {
+      method: "PUT",
+      body: {
+        data: [{ name: "../../etc/passwd", url: samplePng }],
+        version: 0,
+      },
+    })
+  ).status,
+  400,
+  "rejects path traversal in name",
+);
+
+/* valid evidence upload */
+assert.equal(
+  (
+    await lead("/api/evidence/Default/a%7C1", {
+      method: "PUT",
+      body: {
+        data: [{ id: "ev1", name: "proof.png", url: samplePng }],
+        version: 0,
+      },
     })
   ).data.version,
   1,
@@ -433,7 +481,9 @@ assert.equal(
 );
 const bk = await admin("/api/workspaces/Default/export");
 assert.equal(bk.status, 200);
-assert.deepEqual(bk.data.evidence, { "a|1": [{ img: "x" }] });
+assert.deepEqual(bk.data.evidence, {
+  "a|1": [{ id: "ev1", name: "proof.png", url: samplePng }],
+});
 assert.equal(bk.data.stores.prefs, undefined, "prefs stay out of backups");
 assert.equal((await lead("/api/workspaces/Default/export")).status, 403);
 const rs = await admin("/api/workspaces/Client%20A/import", {
@@ -459,6 +509,52 @@ assert.ok(
   )[0].n > 0,
   "but its audit rows remain",
 );
+
+step("workspace membership isolation and member management");
+assert.equal(
+  (await admin("/api/workspaces", { method: "POST", body: { name: "Project Alpha" } })).status,
+  201,
+);
+/* before members assigned: open to all authenticated users */
+assert.equal((await lead("/api/stores/Project%20Alpha")).status, 200);
+/* add auditor as member */
+const addM = await admin("/api/workspaces/Project%20Alpha/members", {
+  method: "POST",
+  body: { username: "aud" },
+});
+assert.equal(addM.status, 201);
+/* now restricted: member 'aud' can access, non-member 'lead' is 403 Forbidden */
+assert.equal((await auditor("/api/stores/Project%20Alpha")).status, 200);
+assert.equal((await lead("/api/stores/Project%20Alpha")).status, 403);
+assert.equal((await lead("/api/evidence/Project%20Alpha")).status, 403);
+/* GET /api/workspaces lists Project Alpha for auditor and admin, but NOT for non-member lead */
+assert.ok((await auditor("/api/workspaces")).data.some((w) => w.name === "Project Alpha"));
+assert.ok((await admin("/api/workspaces")).data.some((w) => w.name === "Project Alpha"));
+assert.ok(!(await lead("/api/workspaces")).data.some((w) => w.name === "Project Alpha"));
+/* remove member */
+assert.equal(
+  (await admin("/api/workspaces/Project%20Alpha/members/aud", { method: "DELETE" })).status,
+  200,
+);
+/* SEC-17: once restricted, removing all members must NOT fail-open to all users */
+assert.equal((await lead("/api/stores/Project%20Alpha")).status, 403, "lead remains forbidden");
+assert.equal((await auditor("/api/stores/Project%20Alpha")).status, 403, "auditor remains forbidden");
+assert.ok(!(await lead("/api/workspaces")).data.some((w) => w.name === "Project Alpha"));
+assert.ok(!(await auditor("/api/workspaces")).data.some((w) => w.name === "Project Alpha"));
+/* admin retains access */
+assert.equal((await admin("/api/stores/Project%20Alpha")).status, 200, "admin can access");
+await admin("/api/workspaces/Project%20Alpha", { method: "DELETE" });
+
+/* explicitly restricted workspace created with { restricted: true } */
+assert.equal(
+  (await admin("/api/workspaces", { method: "POST", body: { name: "Vault", restricted: true } }))
+    .status,
+  201,
+);
+assert.equal((await lead("/api/stores/Vault")).status, 403, "non-admin forbidden from empty restricted ws");
+assert.ok(!(await lead("/api/workspaces")).data.some((w) => w.name === "Vault"));
+assert.equal((await admin("/api/stores/Vault")).status, 200, "admin can access empty restricted ws");
+await admin("/api/workspaces/Vault", { method: "DELETE" });
 
 step(
   "governance: separation of duties, two-person rule, policy limits — enforced by the server",

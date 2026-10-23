@@ -1,0 +1,30 @@
+<?xml version="1.0" ?>
+<NessusClientData_v2>
+  <Report name="Synthetic Audit Scan">
+    <ReportHost name="web01.internal">
+      <HostProperties>
+        <tag name="host-ip">10.0.0.50</tag>
+        <tag name="host-fqdn">web01.corp.internal</tag>
+        <tag name="HOST_START_TIMESTAMP">1772620800</tag>
+      </HostProperties>
+      <ReportItem port="443" svc_name="https" protocol="tcp" severity="4" pluginID="156032" pluginName="Apache Log4j Remote Code Execution">
+        <synopsis>Remote code execution via Log4j.</synopsis>
+        <description>Apache Log4j allows unauthenticated RCE via JNDI lookups in logged messages.</description>
+        <solution>Upgrade to version 2.17.1 or later.</solution>
+        <cvss3_base_score>10.0</cvss3_base_score>
+        <cvss3_vector>CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:H</cvss3_vector>
+        <cve>CVE-2021-44228</cve>
+        <cwe>CWE-502</cwe>
+      </ReportItem>
+      <ReportItem port="22" svc_name="ssh" protocol="tcp" severity="1" pluginID="10881" pluginName="SSH Weak MAC Algorithms">
+        <synopsis>The SSH server supports weak MACs.</synopsis>
+        <description>The remote SSH server is configured to support weak Message Authentication Code (MAC) algorithms.</description>
+        <solution>Disable MD5 and 96-bit MAC algorithms.</solution>
+        <cwe>CWE-327</cwe>
+      </ReportItem>
+      <ReportItem port="0" severity="0" pluginID="19506" pluginName="Nessus Scan Information">
+        <description>Information about the scan engine and configuration.</description>
+      </ReportItem>
+    </ReportHost>
+  </Report>
+</NessusClientData_v2>

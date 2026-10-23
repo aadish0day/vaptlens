@@ -20,14 +20,22 @@ export var ENG_DEFAULT = {
 };
 
 export function dataUrlBytes(u) {
-  var b = atob(u.split(",")[1]),
-    a = new Uint8Array(b.length);
-  for (var i = 0; i < b.length; i++) a[i] = b.charCodeAt(i);
-  return a;
+  if (!u || typeof u !== "string" || !u.includes(",")) return new Uint8Array(0);
+  try {
+    var b = atob(u.split(",")[1]),
+      a = new Uint8Array(b.length);
+    for (var i = 0; i < b.length; i++) a[i] = b.charCodeAt(i);
+    return a;
+  } catch (e) {
+    return new Uint8Array(0);
+  }
 }
 
 export function buildDocx(ctx, R) {
   return import("docx").then(function (D) {
+    function cleanXml(text) {
+      return String(text == null ? "" : text).replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, "");
+    }
     var e = R.eng,
       P2 = D.Paragraph,
       T = D.TextRun,
@@ -36,7 +44,7 @@ export function buildDocx(ctx, R) {
       return new P2(
         Object.assign(
           {
-            children: [new T(String(text == null ? "" : text))],
+            children: [new T(cleanXml(text))],
             spacing: {
               after: 120,
             },
@@ -47,7 +55,7 @@ export function buildDocx(ctx, R) {
     }
     function head(text, lvl?) {
       return new P2({
-        text: text,
+        text: cleanXml(text),
         heading: lvl || HL.HEADING_1,
         spacing: {
           before: 240,
@@ -61,7 +69,7 @@ export function buildDocx(ctx, R) {
           new P2({
             children: [
               new T({
-                text: String(text == null ? "" : text),
+                text: cleanXml(text),
                 bold: !!bold,
                 size: 18,
               }),
@@ -107,26 +115,29 @@ export function buildDocx(ctx, R) {
     }
     var kids = [];
     if (R.show(0)) {
-      if (e.logo) {
+      if (e.logo && /^data:image\/(jpeg|png|webp);base64,/i.test(e.logo)) {
         try {
-          kids.push(
-            new P2({
-              children: [
-                new D.ImageRun({
-                  data: dataUrlBytes(e.logo),
-                  transformation: {
-                    width: 140,
-                    height: 56,
-                  },
-                }),
-              ],
-            }),
-          );
+          var logoBytes = dataUrlBytes(e.logo);
+          if (logoBytes && logoBytes.length) {
+            kids.push(
+              new P2({
+                children: [
+                  new D.ImageRun({
+                    data: logoBytes,
+                    transformation: {
+                      width: 140,
+                      height: 56,
+                    },
+                  }),
+                ],
+              }),
+            );
+          }
         } catch (x) {}
       }
       kids.push(
         new P2({
-          text: R.title,
+          text: cleanXml(R.title),
           heading: HL.TITLE,
         }),
       );

@@ -104,11 +104,16 @@ export function slug(x) {
 }
 /* spreadsheet formula injection guard (OWASP): a cell starting with = + - @ tab or CR is prefixed with ' */
 
-/* spreadsheet formula injection guard (OWASP): a cell starting with = + - @ tab or CR is prefixed with ' */
 export function csvCell(v) {
-  v = v == null ? "" : String(v);
-  if (/^[=+\-@\t\r]/.test(v) && !/^-?\d+(\.\d+)?$/.test(v)) v = "'" + v;
-  return /[",\r\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
+  v = (v == null ? "" : String(v)).replace(/\0/g, "");
+  var trimmed = v.trimStart();
+  if (
+    !/^[+\-]?\d+(\.\d+)?$/.test(trimmed) &&
+    (/^[=+\-@|%]/.test(trimmed) || /^[=+\-@\t\r\n|%]/.test(v))
+  ) {
+    v = "'" + trimmed;
+  }
+  return /[",\r\n\t;]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
 }
 
 export function toCsv(rows) {

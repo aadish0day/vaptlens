@@ -1,12 +1,16 @@
 import React from "react";
 import { Icon } from "@/ui/Icon";
 
-/* ---------- ExternalLink (new tab, noopener, visible + announced "opens in new tab") ---------- */
 export function ExternalLink(props) {
+  var href = String(props.href || "").trim();
+  var safe =
+    /^https?:\/\//i.test(href) || (/^[/#]/.test(href) && !/^\/\//.test(href))
+      ? href
+      : "#";
   return (
     <a
       className="vl-xlink"
-      href={props.href}
+      href={safe}
       target="_blank"
       rel="noopener noreferrer"
     >

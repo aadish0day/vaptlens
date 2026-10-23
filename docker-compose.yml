@@ -48,7 +48,9 @@ services:
       retries: 3
     restart: unless-stopped
     read_only: true
+    tmpfs: ["/tmp"]
     security_opt: ["no-new-privileges:true"]
+    volumes: ["backups:/data/backups"]
 
   # Vite dev server with hot reload → http://localhost:5173
   dev:
@@ -71,3 +73,4 @@ services:
 
 volumes:
   pg-data:
+  backups:

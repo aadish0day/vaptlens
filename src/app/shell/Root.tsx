@@ -32,14 +32,18 @@ export function Root() {
         setPhase("app");
       },
       function (e) {
-        /* the workspace remembered in this browser may have been deleted: fall back to the first one */
-        if (e && e.status === 404)
+        /* the workspace remembered in this browser may have been deleted or access restricted: fall back to the first one */
+        if (e && (e.status === 404 || e.status === 403))
           return WS.list().then(function (l) {
             if (l.length && l[0].name !== WS.current()) {
               WS.setCurrent(l[0].name);
               load(r);
             } else {
-              err[1]("No workspace exists yet. Ask an administrator to create one.");
+              err[1](
+                e.status === 403
+                  ? "You do not have access to any workspace. Ask an administrator to assign you to one."
+                  : "No workspace exists yet. Ask an administrator to create one.",
+              );
               setPhase("down");
             }
           });

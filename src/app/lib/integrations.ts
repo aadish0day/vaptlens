@@ -227,14 +227,14 @@ export function syncJiraCsv(text, ctx) {
     throw new Error(
       "expected Issue key and Status columns (export from Jira as CSV, all fields)",
     );
-  var byLabel = {};
+  var byLabel = Object.create(null);
   Object.keys(ctx.eng.findings).forEach(function (k) {
     [k].concat((ctx.gov[k] || {}).oldKeys || []).forEach(function (k2) {
       byLabel[vlLabel(k2)] = k;
       if (!byLabel[vlLabel32(k2)]) byLabel[vlLabel32(k2)] = k;
     });
   });
-  var patches = {},
+  var patches = Object.create(null),
     matched = 0,
     done = 0,
     unmatched = 0;

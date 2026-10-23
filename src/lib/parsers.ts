@@ -52,15 +52,15 @@ export function txt(el, sel) {
 }
 
 export function cvesIn(s) {
-  var m = String(s || "").match(/CVE-\d{4}-\d{4,7}/gi);
+  var m = String(s || "").match(/\bCVE-\d{4}-\d{4,}\b/gi);
   return m
-    ? m
-        .map(function (x) {
-          return x.toUpperCase();
-        })
-        .filter(function (x, i, a) {
-          return a.indexOf(x) === i;
-        })
+    ? Array.from(
+        new Set(
+          m.map(function (x) {
+            return x.toUpperCase();
+          }),
+        ),
+      )
     : [];
 }
 
@@ -68,7 +68,7 @@ export function cvesIn(s) {
 export function hostOf(u) {
   var str = String(u || "").trim();
   if (/^[0-9a-f:]+(%\w+)?$/i.test(str) && str.indexOf(":") !== str.lastIndexOf(":")) return str.toLowerCase();
-  var br = /^(?:[a-z][a-z0-9+.-]*:\/\/)?\[([0-9a-f:.]+)\]/i.exec(str);
+  var br = /^(?:[a-z][a-z0-9+.-]*:\/\/)?\[([0-9a-f:.]+(?:%[\w.-]+)?)\]/i.exec(str);
   if (br) return br[1].toLowerCase();
   try {
     var h = new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(str) ? str : "http://" + str).hostname;
@@ -78,12 +78,25 @@ export function hostOf(u) {
 }
 
 export function portOf(u) {
-  try {
-    var x = new URL(u);
-    return x.port ? +x.port : x.protocol === "https:" ? 443 : 80;
-  } catch (e) {
-    return null;
+  var str = String(u || "").trim();
+  if (!str) return null;
+  var isBareIpv6 = /^[0-9a-f:]+(%\w+)?$/i.test(str) && str.indexOf(":") !== str.lastIndexOf(":");
+  if (!isBareIpv6) {
+    var m = /(?::(\d{1,5}))(?:[/?#]|$)/.exec(str);
+    if (m) {
+      var p = parseInt(m[1], 10);
+      if (p >= 1 && p <= 65535) return p;
+    }
   }
+  try {
+    var url = new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(str) ? str : "http://" + str);
+    if (/^[a-z][a-z0-9+.-]*:\/\//i.test(str)) {
+      if (url.port) return +url.port;
+      if (url.protocol === "https:") return 443;
+      if (url.protocol === "http:") return 80;
+    }
+  } catch (e) {}
+  return null;
 }
 
 export function pathOf(u) {
@@ -97,22 +110,36 @@ export function pathOf(u) {
 
 export function strip(s) {
   return String(s || "")
-    .replace(/<[^>]+>/g, " ")
+    .replace(/<\/?([a-z][a-z0-9]*)\b[^>]*>/gi, " ")
     .replace(/\s+/g, " ")
     .trim();
 }
 
 export function cwesIn(s) {
-  var m = String(s || "").match(/CWE[-_ ]?(\d{1,5})/gi);
-  return m
-    ? m
-        .map(function (x) {
+  var str = String(s || "").trim();
+  var m = str.match(/CWE[-_ ]?(\d{1,5})/gi);
+  if (m && m.length) {
+    return Array.from(
+      new Set(
+        m.map(function (x) {
           return "CWE-" + x.replace(/\D/g, "");
-        })
-        .filter(function (x, i, a) {
-          return a.indexOf(x) === i;
-        })
-    : [];
+        }),
+      ),
+    );
+  }
+  if (/^[\d\s,;|]+$/.test(str)) {
+    var nums = str.match(/\b\d{1,5}\b/g);
+    if (nums && nums.length) {
+      return Array.from(
+        new Set(
+          nums.map(function (x) {
+            return "CWE-" + x;
+          }),
+        ),
+      );
+    }
+  }
+  return [];
 }
 
 export function row(o) {
@@ -139,9 +166,7 @@ export function row(o) {
         return String(c).trim().toUpperCase();
       })
       .filter(Boolean),
-    cwe: cwe.filter(function (x, i, a) {
-      return a.indexOf(x) === i;
-    }),
+    cwe: Array.from(new Set(cwe)),
     pluginId: o.pluginId ? String(o.pluginId) : undefined,
     tool: o.tool,
     desc: strip(o.desc) || "No description in the export.",
@@ -293,9 +318,7 @@ export function parseOpenVAS(doc) {
         name: txt(r, "nvt > name") || txt(r, "name"),
         sev: normSev(th === "Log" ? "info" : th, sc),
         cvss: sc,
-        cves: cves.filter(function (x, i, a) {
-          return x && a.indexOf(x) === i;
-        }),
+        cves: Array.from(new Set(cves.filter(Boolean))),
         desc: txt(r, "description"),
         sol: txt(r, "nvt > solution"),
       }),
@@ -483,7 +506,7 @@ export function parseNucleiObj(o) {
     cwe: [].concat(cl["cwe-id"] || []),
     dateHint: o.timestamp,
     host: o.host
-      ? hostOf(o.host.indexOf("://") > 0 ? o.host : "http://" + o.host)
+      ? hostOf(String(o.host).indexOf("://") > 0 ? String(o.host) : "http://" + o.host)
       : hostOf(at),
     port: o.port || portOf(at),
     url: pathOf(at),
@@ -501,7 +524,7 @@ export function parseZapJson(j) {
   [].concat(j.site || []).forEach(function (s) {
     var host = s["@host"] || hostOf(s["@name"]),
       port = s["@port"];
-    (s.alerts || []).forEach(function (a) {
+    [].concat(s.alerts || []).forEach(function (a) {
       if (String(a.confidence) === "0") return;
       out.push(
         row({
@@ -615,6 +638,7 @@ export function parseTrivy(j) {
         ? Object.keys(v.CVSS)
             .map(function (k) {
               var c = v.CVSS[k];
+              if (!c || typeof c !== "object") return null;
               var o: any = c.V40Score
                 ? {
                     s: c.V40Score,
@@ -680,7 +704,7 @@ export function parseSarif(j) {
   var out = [];
   (j.runs || []).forEach(function (run) {
     var tool = (run.tool && run.tool.driver && run.tool.driver.name) || "SARIF";
-    var rules = {};
+    var rules = Object.create(null);
     ((run.tool && run.tool.driver && run.tool.driver.rules) || []).forEach(
       function (r) {
         rules[r.id] = r;
@@ -699,10 +723,12 @@ export function parseSarif(j) {
         return;
       var rule = rules[res.ruleId] || {},
         props = rule.properties || {};
-      var ss = num(
-        props["security-severity"] ||
-          (res.properties || {})["security-severity"],
-      );
+      var rawSs =
+        props["security-severity"] != null
+          ? props["security-severity"]
+          : (res.properties || {})["security-severity"];
+      var ss =
+        rawSs != null && String(rawSs).trim() !== "" ? num(rawSs) : null;
       var loc =
         res.locations && res.locations[0] && res.locations[0].physicalLocation;
       var file = loc && loc.artifactLocation ? loc.artifactLocation.uri : "";
@@ -735,7 +761,7 @@ export function parseSarif(j) {
               " " +
               JSON.stringify(props.cwe || ""),
           ),
-          sev: ss
+          sev: ss !== null
             ? normSev("", ss)
             : lvl === "error"
               ? "high"
@@ -744,10 +770,13 @@ export function parseSarif(j) {
                 : lvl === "none"
                   ? "info"
                   : "low",
-          cvss: ss,
+          cvss: ss !== null ? ss : 0,
           cves: cvesIn(JSON.stringify(props.tags || [])),
           desc:
-            (res.message && res.message.text) +
+            ((res.message && (res.message.text || res.message.markdown)) ||
+              (rule.shortDescription && rule.shortDescription.text) ||
+              (rule.fullDescription && rule.fullDescription.text) ||
+              "") +
             (file ? " (" + file + (line ? ":" + line : "") + ")" : ""),
           sol: (rule.help && rule.help.text) || "",
           url: file || undefined,
@@ -762,7 +791,7 @@ export function parseSarif(j) {
 /* CycloneDX 1.4+ (SBOM with vulnerabilities, or a VEX document) */
 export function parseCycloneDx(j) {
   var out: any = [],
-    comps = {},
+    comps = Object.create(null),
     app =
       (j.metadata &&
         j.metadata.component &&
@@ -954,7 +983,7 @@ export function parseQualysAssetReport(doc) {
   var out: any = [];
   out.scope = [];
   out.aliases = [];
-  var gl = {};
+  var gl = Object.create(null);
   doc.querySelectorAll("GLOSSARY VULN_DETAILS").forEach(function (d) {
     gl[
       txt(d, "QID") || String(d.getAttribute("id") || "").replace(/^qid_/, "")
@@ -1012,7 +1041,7 @@ export function parseNexpose(doc) {
   var out: any = [];
   out.scope = [];
   out.aliases = [];
-  var defs = {};
+  var defs = Object.create(null);
   doc
     .querySelectorAll("VulnerabilityDefinitions > vulnerability")
     .forEach(function (v) {
@@ -1116,20 +1145,20 @@ export function parseGrype(j) {
         : hostFull;
   return (j.matches || []).map(function (mt) {
     var v = mt.vulnerability || {},
-      a = mt.artifact || {},
-      c =
-        (v.cvss || [])
-          .concat(
-            (mt.relatedVulnerabilities || []).reduce(function (t, r) {
-              return t.concat(r.cvss || []);
-            }, []),
-          )
-          .sort(function (x, y) {
-            return (
-              ((y.metrics && y.metrics.baseScore) || 0) -
-              ((x.metrics && x.metrics.baseScore) || 0)
-            );
-          })[0] || {};
+      a = mt.artifact || {};
+    var cvssList = Array.isArray(v.cvss) ? v.cvss : (v.cvss ? [v.cvss] : []);
+    var relList = (mt.relatedVulnerabilities || []).reduce(function (t, r) {
+      var rcvss = Array.isArray(r.cvss) ? r.cvss : (r.cvss ? [r.cvss] : []);
+      return t.concat(rcvss);
+    }, []);
+    var c = cvssList
+        .concat(relList)
+        .sort(function (x, y) {
+          return (
+            ((y.metrics && y.metrics.baseScore) || 0) -
+            ((x.metrics && x.metrics.baseScore) || 0)
+          );
+        })[0] || {};
     var ids = [v.id]
       .concat(
         (mt.relatedVulnerabilities || []).map(function (r) {
@@ -1138,8 +1167,8 @@ export function parseGrype(j) {
       )
       .join(" ");
     var fix =
-      v.fix && v.fix.versions && v.fix.versions.length
-        ? v.fix.versions.join(", ")
+      v.fix && v.fix.versions
+        ? (Array.isArray(v.fix.versions) ? v.fix.versions.join(", ") : String(v.fix.versions))
         : "";
     return row({
       tool: "Grype",
@@ -1172,7 +1201,7 @@ export function parseOsv(j) {
       host = src.split(/[\\/]/).slice(-2).join("/");
     (r.packages || []).forEach(function (pk) {
       var p0 = pk.package || {},
-        grp = {};
+        grp = Object.create(null);
       (pk.groups || []).forEach(function (g) {
         (g.ids || []).forEach(function (id) {
           grp[id] = g;
@@ -1180,9 +1209,10 @@ export function parseOsv(j) {
       });
       (pk.vulnerabilities || []).forEach(function (v) {
         var g = grp[v.id] || {},
+          sevArr = Array.isArray(v.severity) ? v.severity : (v.severity ? [v.severity] : []),
           vec = (
-            (v.severity || []).filter(function (x) {
-              return /CVSS_V[34]/.test(x.type);
+            sevArr.filter(function (x) {
+              return x && typeof x === "object" && /CVSS_V[34]/.test(x.type);
             })[0] || {}
           ).score;
         var maxSev = g.max_severity;
@@ -1235,7 +1265,7 @@ export function parseSnyk(j) {
   var out = [];
   [].concat(j).forEach(function (pr) {
     var host = pr.projectName || pr.displayTargetFile || pr.path || "project",
-      seen = {};
+      seen = Object.create(null);
     (pr.vulnerabilities || []).forEach(function (v) {
       if (v.type === "license" || /^snyk:lic:/.test(v.id || ""))
         return; /* license policy issues aren't vulnerabilities */
@@ -1252,17 +1282,17 @@ export function parseSnyk(j) {
           sev: normSev(v.severity, v.cvssScore),
           cvss: v.cvssScore,
           vector: v.CVSSv3 || undefined,
-          cves: cvesIn((ids.CVE || []).join(" ")),
+          cves: cvesIn(Array.isArray(ids.CVE) ? ids.CVE.join(" ") : String(ids.CVE || "")),
           cwe: ids.CWE || [],
           desc:
             strip(v.description || "").slice(0, 1200) +
-            (v.from ? " Path: " + v.from.join(" › ") : ""),
+            (v.from ? " Path: " + (Array.isArray(v.from) ? v.from.join(" › ") : String(v.from)) : ""),
           sol:
-            v.fixedIn && v.fixedIn.length
+            v.fixedIn && (Array.isArray(v.fixedIn) ? v.fixedIn.length : v.fixedIn)
               ? "Upgrade " +
                 v.packageName +
                 " to " +
-                v.fixedIn.join(" or ") +
+                (Array.isArray(v.fixedIn) ? v.fixedIn.join(" or ") : String(v.fixedIn)) +
                 "."
               : v.isUpgradable || v.isPatchable
                 ? "Run snyk wizard / apply the suggested upgrade."
@@ -1277,6 +1307,7 @@ export function parseSnyk(j) {
 export function flatten(o, pre?, acc?) {
   acc = acc || {};
   Object.keys(o || {}).forEach(function (k) {
+    if (k === "__proto__" || k === "constructor" || k === "prototype") return;
     var v = o[k],
       key = pre ? pre + "." + k : k;
     if (v && typeof v === "object" && !Array.isArray(v)) flatten(v, key, acc);
@@ -1317,13 +1348,35 @@ export function parseScanText(name, text) {
 }
 
 export function parseScanTextRaw(name, text) {
+  if (typeof text !== "string" && typeof name === "string") {
+    text = name;
+    name = "scan.txt";
+  } else if (typeof name === "string" && typeof text === "string") {
+    if (/\n/.test(name) || /^[<{]/.test(name.trim())) {
+      var tmp = name;
+      name = text;
+      text = tmp;
+    }
+  }
   var t = text.replace(/^﻿/, "").trim(),
     low = name.toLowerCase();
   if (t[0] === "<") {
+    if (/<!ENTITY/i.test(t) || /<!DOCTYPE[^>]+(SYSTEM|PUBLIC)/i.test(t)) {
+      throw new Error("XML entity declarations (DTD entities) and external DTDs are forbidden");
+    }
     var doc = new DOMParser().parseFromString(t, "application/xml");
-    if (doc.querySelector("parsererror"))
+    if (!doc.documentElement) throw new Error("the XML is malformed");
+    var pe = doc.querySelector("parsererror");
+    if (
+      pe &&
+      (pe === doc.documentElement ||
+        pe.namespaceURI === "http://www.w3.org/1999/xhtml" ||
+        pe.namespaceURI === "http://www.mozilla.org/newlayout/xml/parsererror.xml" ||
+        doc.documentElement.nodeName === "parsererror")
+    ) {
       throw new Error("the XML is malformed");
-    var root = doc.documentElement.nodeName,
+    }
+    var root = (doc.documentElement.localName || doc.documentElement.nodeName).replace(/^.*:/, ""),
       de = doc.documentElement;
     var docDate =
       isoDay(
@@ -1414,19 +1467,20 @@ export function parseScanTextRaw(name, text) {
     } catch (e) {
       var lines = t.split(/\r?\n/).filter(Boolean),
         objs = [];
-      try {
-        lines.forEach(function (l) {
+      lines.forEach(function (l) {
+        try {
           objs.push(JSON.parse(l));
-        });
-      } catch (e2) {
-        throw new Error("the JSON is malformed");
-      }
-      if (objs[0] && (objs[0]["template-id"] || objs[0].info))
+        } catch (e2) {}
+      });
+      if (objs.length && objs[0] && (objs[0]["template-id"] || objs[0].info))
         return {
-          format: "Nuclei JSONL",
+          format: "Nuclei JSON",
           tool: "Nuclei",
           rows: objs.map(parseNucleiObj),
         };
+      if (!objs.length) {
+        throw new Error("the JSON is malformed");
+      }
       j = objs;
     }
     if (j && j.bomFormat === "CycloneDX")
@@ -1584,31 +1638,33 @@ export function rowsFromTable(headers, data, map, tool, scale?) {
       }
       var name = gv("name");
       if (!name) return null;
-      var host = gv("host") || "unknown-host";
-      if (/^https?:/.test(host)) host = hostOf(host);
+      var rawHost = gv("host") || "unknown-host";
+      var host = hostOf(rawHost);
+      var port = gv("port") || portOf(rawHost) || portOf(gv("url"));
       var cvss = num(gv("cvss"));
+      var vector =
+        gv("vector") || (/^CVSS:/.test(gv("cvss")) ? gv("cvss") : undefined);
+      if (!cvss && vector) {
+        var pvx = parseVector(vector);
+        var vsc = pvx ? vectorScore(pvx) : null;
+        if (vsc != null) cvss = vsc;
+      }
       return row({
         tool: tool,
         name: name,
         host: host,
-        port: gv("port"),
+        port: port,
         sev:
           scale === "0-4" && /^[0-4]$/.test(gv("severity"))
             ? ["info", "low", "medium", "high", "critical"][+gv("severity")]
             : normSev(gv("severity"), cvss),
         cvss: cvss,
-        vector:
-          gv("vector") || (/^CVSS:/.test(gv("cvss")) ? gv("cvss") : undefined),
-        cwe: cwesIn(gv("cwe") || gv("cve")),
+        vector: vector,
+        cwe: cwesIn(gv("cwe")),
         pluginId: gv("pluginId")
           ? (PLUGIN_NS[sourceOf(tool) as any] || tool) + ":" + gv("pluginId")
           : undefined,
-        cves: gv("cve")
-          .split(/[,;|]/)
-          .map(function (x) {
-            return x.trim();
-          })
-          .filter(Boolean),
+        cves: cvesIn(gv("cve")),
         desc: gv("description"),
         sol: gv("solution"),
         url: gv("url") || undefined,

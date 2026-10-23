@@ -142,6 +142,8 @@ export var P: any = {
       evCache = {};
       cacheWs = ws;
       P._blocked = {};
+      P._pending = {};
+      P._chain = {};
       STORE_NAMES.forEach(function (n) {
         var x = remote[n];
         cache[n] = entryOf(x ? x.data : null, x ? x.version : 0);
@@ -186,7 +188,10 @@ export var P: any = {
 
   _flush: function (name: string): Promise<boolean> {
     if (!(name in P._pending)) return Promise.resolve(true);
-    if (P._blocked[name]) return Promise.resolve(false);
+    if (P._blocked[name]) {
+      delete P._pending[name];
+      return Promise.resolve(false);
+    }
     var obj = P._pending[name],
       cur = cache[name] || entryOf(null, 0),
       json = JSON.stringify(obj);
@@ -202,7 +207,10 @@ export var P: any = {
       timeout: 60000,
     }).then(
       function (r) {
-        if (ws !== cacheWs) return false;
+        if (ws !== cacheWs) {
+          delete P._pending[name];
+          return false;
+        }
         cache[name] = { data: obj, version: r.version, json: json };
         if (P._pending[name] === obj) delete P._pending[name];
         P._delay = 2000;
@@ -314,6 +322,35 @@ export var WS = {
   },
   remove: function (name: string) {
     return api("/api/workspaces/" + enc(name), { method: "DELETE" });
+  },
+  members: function (
+    ws?: string,
+  ): Promise<
+    {
+      userId: string;
+      username: string;
+      name: string;
+      role: string;
+      addedAt: string;
+      addedBy: string;
+    }[]
+  > {
+    return api("/api/workspaces/" + enc(ws || WS.current()) + "/members");
+  },
+  addMember: function (
+    ws: string,
+    user: { userId?: string; username?: string },
+  ) {
+    return api("/api/workspaces/" + enc(ws) + "/members", {
+      method: "POST",
+      body: user,
+    });
+  },
+  removeMember: function (ws: string, userIdOrName: string) {
+    return api(
+      "/api/workspaces/" + enc(ws) + "/members/" + enc(userIdOrName),
+      { method: "DELETE" },
+    );
   },
 };
 

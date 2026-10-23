@@ -13,8 +13,12 @@
     "lint:tokens": "node scripts/check-tokens.mjs",
     "tokens:dtcg": "node scripts/tokens-to-dtcg.mjs",
     "server": "node server/server.mjs",
-    "test": "node scripts/selftest.mjs && node server/check.mjs",
-    "selftest": "node scripts/selftest.mjs"
+    "test": "node scripts/selftest.mjs && node tests/audit-regression.mjs && node server/check.mjs",
+    "test:audit": "node tests/audit-regression.mjs",
+    "selftest": "node scripts/selftest.mjs",
+    "backup": "node scripts/backup.mjs backup",
+    "backup:verify": "node scripts/backup.mjs verify",
+    "backup:restore": "node scripts/backup.mjs restore"
   },
   "dependencies": {
     "@radix-ui/react-slot": "^1.4.0",

@@ -1,0 +1,38 @@
+{
+  "SchemaVersion": 2,
+  "ArtifactName": "backend-api:latest",
+  "ArtifactType": "container_image",
+  "CreatedAt": "2026-03-15T10:00:00Z",
+  "Results": [
+    {
+      "Target": "backend-api:latest (debian 12.5)",
+      "Class": "os-pkgs",
+      "Type": "debian",
+      "Vulnerabilities": [
+        {
+          "VulnerabilityID": "CVE-2023-48795",
+          "PkgName": "openssh-server",
+          "InstalledVersion": "1:9.2p1-2+deb12u1",
+          "FixedVersion": "1:9.2p1-2+deb12u2",
+          "Severity": "MEDIUM",
+          "Title": "Terrapin attack on SSH protocol",
+          "Description": "Prefix truncation attack in SSH transport protocol.",
+          "CVSS": {
+            "nvd": {
+              "V3Score": 5.9,
+              "V3Vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:H/A:N"
+            }
+          }
+        },
+        {
+          "VulnerabilityID": "CVE-2024-0001",
+          "PkgName": "dummy-unknown-pkg",
+          "InstalledVersion": "0.1",
+          "Severity": "UNKNOWN",
+          "Title": "Unknown severity vulnerability",
+          "Description": "Package with unknown severity test."
+        }
+      ]
+    }
+  ]
+}

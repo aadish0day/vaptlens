@@ -181,6 +181,25 @@ const MIGRATIONS = [
       workspace TEXT NOT NULL, seq INTEGER NOT NULL, at TEXT NOT NULL, user_id TEXT, username TEXT, role TEXT,
       action TEXT NOT NULL, detail TEXT, ref TEXT, prev TEXT, hash TEXT NOT NULL, PRIMARY KEY (workspace, seq))`,
   ],
+  [
+    `CREATE INDEX IF NOT EXISTS idx_vl_sessions_user ON vl_sessions (user_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_vl_audit_ws_seq ON vl_audit (workspace, seq)`,
+    `CREATE INDEX IF NOT EXISTS idx_vl_stores_ws ON vl_stores (workspace)`,
+    `CREATE INDEX IF NOT EXISTS idx_vl_evidence_ws ON vl_evidence (workspace)`,
+  ],
+  [
+    `CREATE TABLE IF NOT EXISTS vl_workspace_members (
+      workspace TEXT NOT NULL REFERENCES vl_workspaces(name) ON DELETE CASCADE,
+      user_id TEXT NOT NULL REFERENCES vl_users(id) ON DELETE CASCADE,
+      added_at TEXT NOT NULL,
+      added_by TEXT,
+      PRIMARY KEY (workspace, user_id))`,
+    `CREATE INDEX IF NOT EXISTS idx_vl_ws_members_user ON vl_workspace_members (user_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_vl_ws_members_ws ON vl_workspace_members (workspace)`,
+  ],
+  [
+    `ALTER TABLE vl_workspaces ADD COLUMN is_restricted INTEGER NOT NULL DEFAULT 0`,
+  ],
 ];
 
 async function migrate() {
@@ -270,6 +289,10 @@ export function isValidName(name) {
     typeof name === "string" &&
     name.length > 0 &&
     name.length <= 128 &&
+    name !== "." &&
+    name !== ".." &&
+    name.trim().length > 0 &&
+    !/^\.+$/.test(name.trim()) &&
     /^[\w .@#-]+$/.test(name) &&
     !name.includes("..")
   );
@@ -280,8 +303,39 @@ function isValidKey(key) {
     typeof key === "string" &&
     key.length > 0 &&
     key.length <= 512 &&
-    key !== ".."
+    key !== ".." &&
+    key !== "." &&
+    key !== "__proto__" &&
+    key !== "constructor" &&
+    key !== "prototype" &&
+    !/[/\\\x00]/.test(key)
   );
+}
+
+export function extractHostname(h) {
+  if (!h) return "";
+  const s = String(h).split(",")[0].trim().toLowerCase();
+  if (s.includes("@")) return "";
+  try {
+    const parsed = new URL(s.includes("://") ? s : "http://" + s);
+    if (parsed.username || parsed.password) return "";
+    return parsed.hostname;
+  } catch (e) {
+    return "";
+  }
+}
+
+export function extractHostAndPort(h) {
+  if (!h) return "";
+  const s = String(h).split(",")[0].trim().toLowerCase();
+  if (s.includes("@")) return "";
+  try {
+    const parsed = new URL(s.includes("://") ? s : "http://" + s);
+    if (parsed.username || parsed.password) return "";
+    return parsed.host;
+  } catch (e) {
+    return "";
+  }
 }
 
 export function crossSiteBlocked(req) {
@@ -289,24 +343,48 @@ export function crossSiteBlocked(req) {
   const site = req.headers["sec-fetch-site"];
   if (site) return site !== "same-origin" && site !== "none";
   const origin = req.headers.origin;
+  const rawHost =
+    (TRUST_PROXY && req.headers["x-forwarded-host"]) ||
+    req.headers.host ||
+    "";
   if (origin) {
-    const host = req.headers["x-forwarded-host"] || req.headers.host || "";
     try {
-      if (new URL(origin).host !== String(host).split(",")[0].trim())
+      const origHost = extractHostAndPort(origin);
+      const srvHost = extractHostAndPort(rawHost);
+      if (!origHost || !srvHost || origHost !== srvHost)
         return true;
     } catch (e) {
       return true;
+    }
+  } else {
+    const referer = req.headers.referer;
+    if (referer) {
+      try {
+        const refHost = extractHostAndPort(referer);
+        const srvHost = extractHostAndPort(rawHost);
+        if (!refHost || !srvHost || refHost !== srvHost)
+          return true;
+      } catch (e) {
+        return true;
+      }
     }
   }
   return false;
 }
 
 export function hostAllowed(req) {
-  const raw = String(req.headers.host || "").toLowerCase();
-  const name = raw.startsWith("[")
-    ? raw.slice(1, raw.indexOf("]"))
-    : raw.split(":")[0];
-  return ALLOWED_HOSTS.includes("*") || ALLOWED_HOSTS.includes(name);
+  const raw = String(req.headers.host || "");
+  const hostname = extractHostname(raw);
+  if (!hostname) return false;
+  const unbracketed =
+    hostname.startsWith("[") && hostname.endsWith("]")
+      ? hostname.slice(1, -1)
+      : hostname;
+  return (
+    ALLOWED_HOSTS.includes("*") ||
+    ALLOWED_HOSTS.includes(hostname) ||
+    ALLOWED_HOSTS.includes(unbracketed)
+  );
 }
 
 function clientIp(req) {
@@ -352,15 +430,26 @@ async function hashPassword(pw) {
   ].join("$");
 }
 
-async function verifyPassword(pw, stored) {
-  const [kind, N, r, p, salt, hash] = String(stored).split("$");
+export async function verifyPassword(pw, stored) {
+  const parts = String(stored).split("$");
+  if (parts.length !== 6) return false;
+  const [kind, NStr, rStr, pStr, saltB64, hashB64] = parts;
   if (kind !== "scrypt") return false;
-  const want = Buffer.from(hash, "base64");
+  const N = Number(NStr);
+  const r = Number(rStr);
+  const p = Number(pStr);
+  if (!Number.isSafeInteger(N) || N < 2 || (N & (N - 1)) !== 0) return false;
+  if (!Number.isSafeInteger(r) || r < 1 || !Number.isSafeInteger(p) || p < 1)
+    return false;
+  const salt = Buffer.from(saltB64, "base64");
+  if (salt.length < 16) return false;
+  const want = Buffer.from(hashB64, "base64");
+  if (want.length !== SCRYPT.keylen) return false;
   const got = await scrypt(
     String(pw),
-    Buffer.from(salt, "base64"),
+    salt,
     want.length,
-    { N: +N, r: +r, p: +p, maxmem: 128 * +N * +r * 2 },
+    { N, r, p, maxmem: 128 * N * r * 2 },
   );
   return got.length === want.length && timingSafeEqual(got, want);
 }
@@ -377,7 +466,16 @@ const attempts = new Map();
 function rateLimited(ip) {
   const t = Date.now();
   const a = (attempts.get(ip) || []).filter((x) => t - x < 5 * 60000);
-  attempts.set(ip, a);
+  if (a.length === 0) {
+    attempts.delete(ip);
+  } else {
+    attempts.set(ip, a);
+  }
+  if (attempts.size > 5000) {
+    for (const [k, v] of attempts) {
+      if (v.every((x) => t - x >= 5 * 60000)) attempts.delete(k);
+    }
+  }
   return a.length >= 20;
 }
 function noteAttempt(ip) {
@@ -414,7 +512,9 @@ function adminView(u) {
 
 const SID = "vl_sid";
 function sessionCookie(req, token, maxAge) {
-  const secure = COOKIE_SECURE || req.headers["x-forwarded-proto"] === "https";
+  const secure =
+    COOKIE_SECURE ||
+    (TRUST_PROXY && req.headers["x-forwarded-proto"] === "https");
   return [
     SID + "=" + token,
     "Path=/api",
@@ -495,6 +595,7 @@ export function auditHash(e) {
       e.workspace,
       e.seq,
       e.at,
+      e.user_id || "",
       e.username || "",
       e.role || "",
       e.action,
@@ -580,7 +681,14 @@ function clientAuditEntry(r) {
   return o;
 }
 
-export async function verifyAuditChain(workspace) {
+function safeEq(a, b) {
+  if (typeof a !== "string" || typeof b !== "string") return false;
+  const ba = Buffer.from(a);
+  const bb = Buffer.from(b);
+  return ba.length === bb.length && timingSafeEqual(ba, bb);
+}
+
+export async function verifyAuditChain(workspace, expectedMinSeq) {
   const rows = await q(
     "SELECT * FROM vl_audit WHERE workspace = $1 ORDER BY seq ASC",
     [workspace],
@@ -595,14 +703,14 @@ export async function verifyAuditChain(workspace) {
         at: r.seq,
         reason: "entries missing before #" + r.seq,
       };
-    if ((r.prev || "") !== prev)
+    if (!safeEq(r.prev || "", prev))
       return {
         ok: false,
         n: rows.length,
         at: r.seq,
         reason: "link broken at #" + r.seq,
       };
-    if (auditHash(r) !== r.hash)
+    if (!safeEq(auditHash(r), r.hash))
       return {
         ok: false,
         n: rows.length,
@@ -611,16 +719,36 @@ export async function verifyAuditChain(workspace) {
       };
     prev = r.hash;
   }
-  return { ok: true, n: rows.length };
+  if (expectedMinSeq != null && rows.length < expectedMinSeq) {
+    return {
+      ok: false,
+      n: rows.length,
+      at: rows.length + 1,
+      reason: "tail truncated; expected at least sequence #" + expectedMinSeq,
+    };
+  }
+  return { ok: true, n: rows.length, head: prev };
 }
 
 /* ---------- workspaces / stores / evidence ---------- */
-async function requireWorkspace(name) {
+async function requireWorkspace(name, user) {
   if (!isValidName(name) || name === SYSTEM_WS) fail(404, "No such workspace");
   const r = (
-    await q("SELECT name FROM vl_workspaces WHERE name = $1", [name])
+    await q("SELECT name, is_restricted FROM vl_workspaces WHERE name = $1", [name])
   )[0];
   if (!r) fail(404, "No such workspace");
+  if (!user) fail(401, "Sign in to continue.", { code: "signed_out" });
+  if (user.role === ADMIN) return;
+  const members = await q(
+    "SELECT user_id FROM vl_workspace_members WHERE workspace = $1",
+    [name],
+  );
+  const isRestricted = !!r.is_restricted || members.length > 0;
+  if (isRestricted && !members.some((m) => m.user_id === user.id)) {
+    fail(403, "You do not have access to this workspace.", {
+      code: "workspace_forbidden",
+    });
+  }
 }
 
 /* prefs are per user: the client sends/receives { [username]: prefs } but only ever sees and writes its own */
@@ -708,11 +836,12 @@ export function findingFacts(scans) {
         );
     const cur = out.get(r.key);
     const sev = String(r.sev || "info").toLowerCase();
-    if (!cur) out.set(r.key, { sev, kev });
+    if (!cur) out.set(r.key, { sev, kev, cves });
     else
       out.set(r.key, {
         sev: (SEV_RANK[sev] || 0) > (SEV_RANK[cur.sev] || 0) ? sev : cur.sev,
         kev: cur.kev || kev,
+        cves: Array.from(new Set(cur.cves.concat(cves))),
       });
   }
   return out;
@@ -746,7 +875,7 @@ export function checkRemediation(oldGov, newGov, actor, policy, facts, today) {
 
     /* requests are always made in your own name (or put back by whoever approved them, when undoing) */
     if (
-      n.state === "requested" &&
+      (n.state === "requested" || (n.pendingRenewal && o.state === "accepted")) &&
       (o.state !== "requested" ||
         !same(o.requestedBy, n.requestedBy) ||
         !same(o.requestedState, n.requestedState))
@@ -762,15 +891,38 @@ export function checkRemediation(oldGov, newGov, actor, policy, facts, today) {
         });
     }
 
+    /* revoking, clearing, or deleting an approved exception or false positive requires an administrator */
+    if (decided(o.state) && !decided(n.state) && !admin)
+      fail(
+        403,
+        "Only an administrator can revoke or clear an approved exception or false positive.",
+        { code: "governance", key: k },
+      );
+
     /* accepting risk or marking false positive (new, renewed, re-dated or re-approved) */
+    const isRequestOnly =
+      (n.state === "requested" && !n.approvedBy) ||
+      (n.pendingRenewal && n.state === o.state && same(o.approvedBy, n.approvedBy) && same(o.until, n.until));
     if (
       decided(n.state) &&
+      !isRequestOnly &&
       (o.state !== n.state ||
         !same(o.until, n.until) ||
         !same(o.approvedBy, n.approvedBy))
     ) {
+      const factCves = (fact && Array.isArray(fact.cves)) ? fact.cves : [];
+      const isVexCandidate =
+        n.state === "fp" &&
+        n.by === "VEX" &&
+        typeof n.vexId === "string" &&
+        n.vexId.trim().length > 0 &&
+        !n.approvedBy;
       const vex =
-        n.state === "fp" && n.by === "VEX" && n.vexId && !n.approvedBy;
+        isVexCandidate &&
+        (factCves.length === 0 ||
+          factCves.some((c) =>
+            String(n.vexId).toUpperCase().includes(String(c).toUpperCase()),
+          ));
       if (!admin)
         fail(
           403,
@@ -784,10 +936,10 @@ export function checkRemediation(oldGov, newGov, actor, policy, facts, today) {
             key: k,
           });
         const fromOthersRequest =
-          o.state === "requested" &&
-          o.requestedState === n.state &&
+          (o.state === "requested" || (o.state === "accepted" && o.pendingRenewal)) &&
+          (o.requestedState === n.state || (!o.requestedState && n.state === "accepted")) &&
           o.requestedBy &&
-          o.requestedBy !== me;
+          String(o.requestedBy).toLowerCase() !== String(me).toLowerCase();
         if (sod && !fromOthersRequest)
           fail(
             403,
@@ -805,7 +957,7 @@ export function checkRemediation(oldGov, newGov, actor, policy, facts, today) {
         const max =
           (pol.maxDays || {})[fact && fact.sev] ||
           Math.min(...Object.values(pol.maxDays || { x: 365 }).map(Number));
-        if (!n.until || n.until > addDaysIso(today, max))
+        if (!n.until || n.until > addDaysIso(today, max) || n.until < today)
           fail(
             400,
             "Exceptions for this finding can last at most " +
@@ -923,6 +1075,8 @@ route(
   "/api/auth/setup",
   { auth: false, limit: MAX_AUTH_BYTES },
   async (req, ctx) => {
+    if (+(await q("SELECT COUNT(*) AS n FROM vl_users"))[0].n)
+      fail(409, "Setup is already done. Sign in instead.");
     const b = ctx.body;
     const username = String(b.username || "")
       .trim()
@@ -989,33 +1143,57 @@ route(
     const u = (
       await q("SELECT * FROM vl_users WHERE username = $1", [username])
     )[0];
-    const ok = await verifyPassword(pw, u ? u.pw_hash : DUMMY_HASH);
-    const bad = () => fail(401, "Wrong username or password.", { code: "bad" });
-    if (!u) bad();
-    if (u.locked_until && u.locked_until > now())
+    if (u && u.locked_until && u.locked_until > now())
       fail(423, "Too many failed attempts. Try again in a few minutes.", {
         code: "locked",
       });
-    if (!ok) {
-      const failed =
-        (u.locked_until && u.locked_until <= now() ? 0 : +u.failed) + 1;
-      const lock =
-        failed >= LOCK_AFTER
-          ? new Date(Date.now() + LOCK_MINUTES * 60000).toISOString()
-          : null;
-      await q(
-        "UPDATE vl_users SET failed = $1, locked_until = $2, last_failed_at = $3 WHERE id = $4",
-        [failed, lock, now(), u.id],
+    const ok = await verifyPassword(pw, u ? u.pw_hash : DUMMY_HASH);
+    const bad = () => fail(401, "Wrong username or password.", { code: "bad" });
+    if (!u) {
+      await appendAudit(
+        SYSTEM_WS,
+        { id: null, username: username.slice(0, 64), role: "unknown" },
+        "LOGIN_FAILED",
+        "Failed sign-in attempt for unknown username: " + username.slice(0, 64),
       );
+      bad();
+    }
+    if (!ok) {
+      let isLocked = false;
+      await tx(async (t) => {
+        const cur = (
+          await t(
+            `SELECT failed, locked_until, last_failed_at FROM vl_users WHERE id = $1${isPostgres ? " FOR UPDATE" : ""}`,
+            [u.id],
+          )
+        )[0];
+        if (!cur) return;
+        const isExpired =
+          cur.last_failed_at &&
+          Date.now() - Date.parse(cur.last_failed_at) > 15 * 60000;
+        const failed =
+          (cur.locked_until && cur.locked_until <= now()) || isExpired
+            ? 1
+            : +cur.failed + 1;
+        const lock =
+          failed >= LOCK_AFTER
+            ? new Date(Date.now() + LOCK_MINUTES * 60000).toISOString()
+            : null;
+        if (lock) isLocked = true;
+        await t(
+          "UPDATE vl_users SET failed = $1, locked_until = $2, last_failed_at = $3 WHERE id = $4",
+          [failed, lock, now(), u.id],
+        );
+      });
       await appendAudit(
         SYSTEM_WS,
         u,
         "LOGIN_FAILED",
         u.username +
           " failed to sign in" +
-          (lock ? "; account locked " + LOCK_MINUTES + " min" : ""),
+          (isLocked ? "; account locked " + LOCK_MINUTES + " min" : ""),
       );
-      if (lock)
+      if (isLocked)
         fail(
           423,
           "Too many failed attempts. Locked for " + LOCK_MINUTES + " minutes.",
@@ -1131,6 +1309,8 @@ route(
     if (!ROLES.includes(b.role)) fail(400, "Pick a role.");
     const issues = passwordIssues(b.password, username);
     if (issues.length) fail(400, "Password needs " + issues.join(", ") + ".");
+    if (b.name != null && /\x00/.test(String(b.name)))
+      fail(400, "Invalid characters in name.");
     const u = {
       id: randomUUID(),
       username,
@@ -1197,6 +1377,8 @@ route(
         !(await activeAdmins(t, u.id))
       )
         fail(409, "Keep at least one active administrator.");
+      if (b.name !== undefined && /\x00/.test(String(b.name)))
+        fail(400, "Invalid characters in name.");
       const name =
         b.name !== undefined
           ? String(b.name).trim().slice(0, 80) || u.username
@@ -1259,6 +1441,8 @@ route("DELETE", "/api/users/:id", { roles: [ADMIN] }, async (req, ctx) => {
     if (gone.role === ADMIN && !(await activeAdmins(t, gone.id)))
       fail(409, "Keep at least one active administrator.");
     await t("DELETE FROM vl_users WHERE id = $1", [gone.id]);
+    await t("DELETE FROM vl_sessions WHERE user_id = $1", [gone.id]);
+    await t("DELETE FROM vl_stores WHERE name = $1", ["prefs@" + gone.id]);
   });
   await appendAudit(
     SYSTEM_WS,
@@ -1293,17 +1477,30 @@ route(
 );
 
 /* workspaces */
-route("GET", "/api/workspaces", {}, async () => ({
-  body: (
-    await q(
-      "SELECT name, created_at, created_by FROM vl_workspaces ORDER BY name",
-    )
-  ).map((r) => ({
-    name: r.name,
-    createdAt: r.created_at,
-    createdBy: r.created_by,
-  })),
-}));
+route("GET", "/api/workspaces", {}, async (req, ctx) => {
+  let rows;
+  if (ctx.user.role === ADMIN) {
+    rows = await q(
+      "SELECT name, created_at, created_by, is_restricted FROM vl_workspaces ORDER BY name",
+    );
+  } else {
+    rows = await q(
+      `SELECT w.name, w.created_at, w.created_by, w.is_restricted FROM vl_workspaces w
+       WHERE (w.is_restricted = 0 AND NOT EXISTS (SELECT 1 FROM vl_workspace_members m WHERE m.workspace = w.name))
+          OR EXISTS (SELECT 1 FROM vl_workspace_members m WHERE m.workspace = w.name AND m.user_id = $1)
+       ORDER BY w.name`,
+      [ctx.user.id],
+    );
+  }
+  return {
+    body: rows.map((r) => ({
+      name: r.name,
+      createdAt: r.created_at,
+      createdBy: r.created_by,
+      restricted: !!r.is_restricted,
+    })),
+  };
+});
 
 route(
   "POST",
@@ -1316,23 +1513,37 @@ route(
         400,
         "Workspace names are 1–128 letters, numbers, spaces and . @ # - _",
       );
+    const restricted = ctx.body.restricted ? 1 : 0;
     const ins = await q(
-      "INSERT INTO vl_workspaces (name, created_at, created_by) VALUES ($1, $2, $3) ON CONFLICT (name) DO NOTHING RETURNING name",
-      [name, now(), ctx.user.username],
+      "INSERT INTO vl_workspaces (name, created_at, created_by, is_restricted) VALUES ($1, $2, $3, $4) ON CONFLICT (name) DO NOTHING RETURNING name",
+      [name, now(), ctx.user.username, restricted],
     );
     if (!ins.length) fail(409, "A workspace with that name already exists.");
+    if (restricted && ctx.user && ctx.user.id) {
+      await q(
+        "INSERT INTO vl_workspace_members (workspace, user_id, added_at, added_by) VALUES ($1, $2, $3, $4) ON CONFLICT (workspace, user_id) DO NOTHING",
+        [name, ctx.user.id, now(), ctx.user.username],
+      );
+    }
     await appendAudit(
       name,
       ctx.user,
       "WORKSPACE_CREATE",
       ctx.user.username + " created workspace " + name,
     );
-    return { status: 201, body: { name } };
+    await appendAudit(
+      SYSTEM_WS,
+      ctx.user,
+      "WORKSPACE_CREATE",
+      ctx.user.username + " created workspace " + name,
+      { workspace: name },
+    );
+    return { status: 201, body: { name, restricted: !!restricted } };
   },
 );
 
 route("DELETE", "/api/workspaces/:ws", { roles: [ADMIN] }, async (req, ctx) => {
-  await requireWorkspace(ctx.params.ws);
+  await requireWorkspace(ctx.params.ws, ctx.user);
   await q("DELETE FROM vl_workspaces WHERE name = $1", [ctx.params.ws]);
   await appendAudit(
     ctx.params.ws,
@@ -1340,12 +1551,119 @@ route("DELETE", "/api/workspaces/:ws", { roles: [ADMIN] }, async (req, ctx) => {
     "WORKSPACE_DELETE",
     ctx.user.username + " deleted workspace " + ctx.params.ws,
   );
+  await appendAudit(
+    SYSTEM_WS,
+    ctx.user,
+    "WORKSPACE_DELETE",
+    ctx.user.username + " deleted workspace " + ctx.params.ws,
+    { workspace: ctx.params.ws },
+  );
   return { body: { ok: true } };
 });
 
+route("GET", "/api/workspaces/:ws/members", {}, async (req, ctx) => {
+  await requireWorkspace(ctx.params.ws, ctx.user);
+  const rows = await q(
+    `SELECT m.user_id AS "userId", u.username, u.name, u.role, m.added_at AS "addedAt", m.added_by AS "addedBy"
+     FROM vl_workspace_members m
+     JOIN vl_users u ON u.id = m.user_id
+     WHERE m.workspace = $1
+     ORDER BY u.username`,
+    [ctx.params.ws],
+  );
+  return { body: rows };
+});
+
+route(
+  "POST",
+  "/api/workspaces/:ws/members",
+  { roles: [ADMIN], limit: MAX_AUTH_BYTES },
+  async (req, ctx) => {
+    await requireWorkspace(ctx.params.ws, ctx.user);
+    const userId = ctx.body.userId;
+    const username = ctx.body.username
+      ? String(ctx.body.username).trim().toLowerCase()
+      : "";
+    if (userId && /\x00/.test(String(userId)))
+      fail(400, "Invalid characters in userId.");
+    if (username && /\x00/.test(username))
+      fail(400, "Invalid characters in username.");
+    const target = (
+      await q(
+        "SELECT id, username FROM vl_users WHERE id = $1 OR username = $2",
+        [userId || "", username || ""],
+      )
+    )[0];
+    if (!target) fail(404, "No such user");
+    try {
+      await q(
+        "INSERT INTO vl_workspace_members (workspace, user_id, added_at, added_by) VALUES ($1, $2, $3, $4)",
+        [ctx.params.ws, target.id, now(), ctx.user.username],
+      );
+      await q(
+        "UPDATE vl_workspaces SET is_restricted = 1 WHERE name = $1",
+        [ctx.params.ws],
+      );
+    } catch (e) {
+      if (/unique|duplicate|constraint/i.test(e.message)) {
+        fail(409, "User is already a member of this workspace.");
+      }
+      throw e;
+    }
+    await appendAudit(
+      ctx.params.ws,
+      ctx.user,
+      "MEMBER_ADD",
+      ctx.user.username +
+        " added " +
+        target.username +
+        " to workspace " +
+        ctx.params.ws,
+      { userId: target.id, username: target.username },
+    );
+    return {
+      status: 201,
+      body: { ok: true, userId: target.id, username: target.username },
+    };
+  },
+);
+
+route(
+  "DELETE",
+  "/api/workspaces/:ws/members/:id",
+  { roles: [ADMIN] },
+  async (req, ctx) => {
+    await requireWorkspace(ctx.params.ws, ctx.user);
+    const idVal = String(ctx.params.id || "").trim();
+    const target = (
+      await q(
+        "SELECT id, username FROM vl_users WHERE id = $1 OR username = $2",
+        [idVal, idVal.toLowerCase()],
+      )
+    )[0];
+    if (!target) fail(404, "No such user");
+    await q(
+      "DELETE FROM vl_workspace_members WHERE workspace = $1 AND user_id = $2",
+      [ctx.params.ws, target.id],
+    );
+    await appendAudit(
+      ctx.params.ws,
+      ctx.user,
+      "MEMBER_REMOVE",
+      ctx.user.username +
+        " removed " +
+        target.username +
+        " from workspace " +
+        ctx.params.ws,
+      { userId: target.id, username: target.username },
+    );
+    return { body: { ok: true } };
+  },
+);
+
 /* stores: whole-document, optimistic versions */
 route("GET", "/api/stores/:ws", {}, async (req, ctx) => {
-  await requireWorkspace(ctx.params.ws);
+  await requireWorkspace(ctx.params.ws, ctx.user);
   const rows = await q(
     "SELECT name, value, version FROM vl_stores WHERE workspace = $1 AND (name NOT LIKE 'prefs@%' OR name = $2)",
     [ctx.params.ws, prefsRow(ctx.user)],
@@ -1367,7 +1685,7 @@ route("PUT", "/api/stores/:ws/:name", {}, async (req, ctx) => {
   if (!STORE_NAMES.includes(name)) fail(404, "Unknown store");
   if (!canWriteStore(ctx.user, name))
     fail(403, "Your role (" + ctx.user.role + ") can't change " + name + ".");
-  await requireWorkspace(ws);
+  await requireWorkspace(ws, ctx.user);
   const b = ctx.body;
   if (name === "prefs") {
     /* only the caller's own slice is stored; last write wins (it's one person's view settings) */
@@ -1424,6 +1742,32 @@ route("PUT", "/api/stores/:ws/:name", {}, async (req, ctx) => {
         );
     }
   }
+  if (name === "report") {
+    const engRow = (
+      await q(
+        "SELECT value, version FROM vl_stores WHERE workspace = $1 AND name = 'engagement'",
+        [ws],
+      )
+    )[0];
+    if (engRow) {
+      const eng = JSON.parse(engRow.value);
+      if (eng && eng.status === "Approved") {
+        eng.status = "In review";
+        eng.approvedAt = "";
+        eng.approvedBy = "";
+        await q(
+          "UPDATE vl_stores SET value = $1, version = vl_stores.version + 1, updated_at = $2, updated_by = $3 WHERE workspace = $4 AND name = 'engagement'",
+          [JSON.stringify(eng), now(), ctx.user.username, ws],
+        );
+        await appendAudit(
+          ws,
+          ctx.user,
+          "REPORT_WITHDRAWN",
+          "Report edited after approval; status reset to In review",
+        );
+      }
+    }
+  }
   const version = await putVersioned(
     "vl_stores",
     "name",
@@ -1433,12 +1777,21 @@ route("PUT", "/api/stores/:ws/:name", {}, async (req, ctx) => {
     want,
     ctx.user,
   );
+  if (name !== "prefs") {
+    await appendAudit(
+      ws,
+      ctx.user,
+      "STORE_UPDATE",
+      "Updated store " + name + " (v" + version + ")",
+      { store: name, version },
+    );
+  }
   return { body: { version } };
 });
 
 /* evidence: one list of images per finding key */
 route("GET", "/api/evidence/:ws", {}, async (req, ctx) => {
-  await requireWorkspace(ctx.params.ws);
+  await requireWorkspace(ctx.params.ws, ctx.user);
   return {
     body: (
       await q("SELECT key FROM vl_evidence WHERE workspace = $1 ORDER BY key", [
@@ -1449,7 +1802,7 @@ route("GET", "/api/evidence/:ws", {}, async (req, ctx) => {
 });
 
 route("GET", "/api/evidence/:ws/:key", {}, async (req, ctx) => {
-  await requireWorkspace(ctx.params.ws);
+  await requireWorkspace(ctx.params.ws, ctx.user);
   if (!isValidKey(ctx.params.key)) fail(400, "Bad evidence key");
   const r = (
     await q(
@@ -1467,11 +1820,31 @@ route("GET", "/api/evidence/:ws/:key", {}, async (req, ctx) => {
 route(
   "PUT",
   "/api/evidence/:ws/:key",
-  { roles: [ADMIN, LEAD] },
+  { roles: [ADMIN, LEAD], limit: 8 * 1024 * 1024 },
   async (req, ctx) => {
-    await requireWorkspace(ctx.params.ws);
+    await requireWorkspace(ctx.params.ws, ctx.user);
     if (!isValidKey(ctx.params.key)) fail(400, "Bad evidence key");
     if (!Array.isArray(ctx.body.data)) fail(400, "Evidence is a list.");
+    if (ctx.body.data.length > 50)
+      fail(400, "Evidence list too long (max 50 items).");
+    const DATA_IMAGE_RE = /^data:image\/(jpeg|png|webp|gif);base64,[A-Za-z0-9+/=]+$/;
+    for (const item of ctx.body.data) {
+      if (!item || typeof item !== "object" || Array.isArray(item)) {
+        fail(400, "Invalid evidence item format.");
+      }
+      if (typeof item.url !== "string" || !DATA_IMAGE_RE.test(item.url)) {
+        fail(400, "Invalid evidence image: must be a base64 JPEG, PNG, WebP or GIF data URL.");
+      }
+      if (item.url.length > 4 * 1024 * 1024) {
+        fail(400, "Evidence item exceeds 4MB limit.");
+      }
+      if (typeof item.name !== "string" || !item.name.trim() || item.name.length > 256 || item.name.includes("..") || /[\x00-\x1f]/.test(item.name)) {
+        fail(400, "Invalid evidence item name.");
+      }
+      if (item.id !== undefined && (typeof item.id !== "string" || item.id.length > 64)) {
+        fail(400, "Invalid evidence item id.");
+      }
+    }
     const version = await putVersioned(
       "vl_evidence",
       "key",
@@ -1481,6 +1854,13 @@ route(
       parseVersion(ctx.body.version),
       ctx.user,
     );
+    await appendAudit(
+      ctx.params.ws,
+      ctx.user,
+      "EVIDENCE_UPDATE",
+      "Updated evidence for " + ctx.params.key + " (v" + version + ")",
+      { key: ctx.params.key, version },
+    );
     return { body: { version } };
   },
 );
@@ -1489,15 +1869,14 @@ route(
 route("GET", "/api/audit/:ws", {}, async (req, ctx) => {
   const ws = ctx.params.ws;
   if (ws === SYSTEM_WS) requireRole(ctx.user, [ADMIN]);
-  else await requireWorkspace(ws);
+  else await requireWorkspace(ws, ctx.user);
   const limit = Math.min(
     5000,
     Math.max(1, +(ctx.url.searchParams.get("limit") || 2000) || 2000),
   );
   const rows = await q(
-    "SELECT * FROM vl_audit WHERE workspace = $1 ORDER BY seq DESC LIMIT " +
-      limit,
-    [ws],
+    "SELECT * FROM vl_audit WHERE workspace = $1 ORDER BY seq DESC LIMIT $2",
+    [ws, limit],
   );
   const total = +(
     await q("SELECT COUNT(*) AS n FROM vl_audit WHERE workspace = $1", [ws])
@@ -1506,22 +1885,45 @@ route("GET", "/api/audit/:ws", {}, async (req, ctx) => {
 });
 
 route("POST", "/api/audit/:ws", { limit: 256 * 1024 }, async (req, ctx) => {
-  await requireWorkspace(ctx.params.ws);
+  await requireWorkspace(ctx.params.ws, ctx.user);
   const b = ctx.body;
   if (typeof b.action !== "string" || !/^[A-Z0-9_-]{1,64}$/.test(b.action))
     fail(400, "Bad audit action");
+  if (ctx.user.role === AUDITOR) {
+    const AUDITOR_ALLOWED_ACTIONS = ["EXPORT", "REPORT", "VIEW", "VERIFY"];
+    if (!AUDITOR_ALLOWED_ACTIONS.includes(b.action)) {
+      fail(403, "Security Auditors can only log read/export audit events.");
+    }
+  } else if (ctx.user.role !== ADMIN) {
+    const RESERVED_SYSTEM_ACTIONS = [
+      "USER_ADD",
+      "USER_UPDATE",
+      "USER_DELETE",
+      "PASSWORD_CHANGE",
+      "WORKSPACE_CREATE",
+      "WORKSPACE_DELETE",
+      "MEMBER_ADD",
+      "MEMBER_REMOVE",
+      "BACKUP_RESTORE",
+      "LOGIN_FAILED",
+      "SETUP",
+    ];
+    if (RESERVED_SYSTEM_ACTIONS.includes(b.action)) {
+      fail(403, "Client audit events cannot forge system actions.");
+    }
+  }
   if (
     b.detail != null &&
-    (typeof b.detail !== "string" || b.detail.length > 4000)
+    (typeof b.detail !== "string" || b.detail.length > 4000 || /\x00/.test(b.detail))
   )
-    fail(400, "Audit detail is text up to 4000 characters.");
+    fail(400, "Audit detail is text up to 4000 characters without null bytes.");
   const ref = b.ref;
   const refOk =
     ref == null ||
-    (typeof ref === "string" && ref.length <= 512) ||
+    (typeof ref === "string" && ref.length <= 512 && !/\x00/.test(ref)) ||
     (Array.isArray(ref) &&
       ref.length <= 50 &&
-      ref.every((x) => typeof x === "string" && x.length <= 512));
+      ref.every((x) => typeof x === "string" && x.length <= 512 && !/\x00/.test(x)));
   if (!refOk) fail(400, "Bad audit ref");
   const e = await appendAudit(ctx.params.ws, ctx.user, b.action, b.detail, ref);
   return { status: 201, body: clientAuditEntry(e) };
@@ -1529,8 +1931,11 @@ route("POST", "/api/audit/:ws", { limit: 256 * 1024 }, async (req, ctx) => {
 
 route("GET", "/api/audit/:ws/verify", {}, async (req, ctx) => {
   if (ctx.params.ws === SYSTEM_WS) requireRole(ctx.user, [ADMIN]);
-  else await requireWorkspace(ctx.params.ws);
-  return { body: await verifyAuditChain(ctx.params.ws) };
+  else await requireWorkspace(ctx.params.ws, ctx.user);
+  const minSeq = req.url.includes("minSeq=")
+    ? +new URL(req.url, "http://localhost").searchParams.get("minSeq")
+    : null;
+  return { body: await verifyAuditChain(ctx.params.ws, minSeq) };
 });
 
 /* full workspace backup / restore (admin) */
@@ -1540,7 +1945,7 @@ route(
   { roles: [ADMIN] },
   async (req, ctx) => {
     const ws = ctx.params.ws;
-    await requireWorkspace(ws);
+    await requireWorkspace(ws, ctx.user);
     const stores = {};
     for (const r of await q(
       "SELECT name, value FROM vl_stores WHERE workspace = $1 AND name NOT LIKE 'prefs@%'",
@@ -1578,7 +1983,7 @@ route(
   { roles: [ADMIN] },
   async (req, ctx) => {
     const ws = ctx.params.ws;
-    await requireWorkspace(ws);
+    await requireWorkspace(ws, ctx.user);
     const b = ctx.body;
     if (
       b.app !== "VAPTLens" ||
@@ -1594,6 +1999,47 @@ route(
     const evKeys = Object.keys(ev).filter(
       (k) => isValidKey(k) && Array.isArray(ev[k]),
     );
+    const DATA_IMAGE_RE = /^data:image\/(jpeg|png|webp|gif);base64,[A-Za-z0-9+/=]+$/;
+    for (const k of evKeys) {
+      if (ev[k].length > 50) fail(400, "Imported evidence list too long (max 50 items).");
+      for (const item of ev[k]) {
+        if (!item || typeof item !== "object" || Array.isArray(item)) {
+          fail(400, "Invalid imported evidence item format.");
+        }
+        if (typeof item.url !== "string" || !DATA_IMAGE_RE.test(item.url)) {
+          fail(400, "Invalid imported evidence image URL.");
+        }
+      }
+    }
+    if (b.stores.engagement && typeof b.stores.engagement === "object") {
+      const eng = b.stores.engagement;
+      if (
+        eng.status === "Approved" &&
+        (!eng.approvedBy || eng.approvedBy === ctx.user.username)
+      ) {
+        eng.status = "In review";
+        eng.approvedAt = null;
+        eng.approvedBy = null;
+      }
+    }
+    if (b.stores.remediation && typeof b.stores.remediation === "object") {
+      const rem = b.stores.remediation;
+      for (const k of Object.keys(rem)) {
+        const item = rem[k];
+        if (
+          item &&
+          typeof item === "object" &&
+          (item.state === "accepted" || item.state === "fp") &&
+          item.by &&
+          item.approvedBy &&
+          item.by === item.approvedBy
+        ) {
+          item.state = "requested";
+          item.approvedBy = null;
+          item.approvedAt = null;
+        }
+      }
+    }
     const t0 = now();
     await tx(async (t) => {
       await t(
@@ -1736,6 +2182,7 @@ export async function handler(req, res) {
       route: ctx.route,
       status: res.statusCode,
       ms: Date.now() - started,
+      ip: clientIp(req),
       user: ctx.user ? ctx.user.username : undefined,
     });
   }
@@ -1817,4 +2264,4 @@ if (isMain) {
   );
 }
 
-export { q, tx, pool };
+export { q, tx, pool, migrate };

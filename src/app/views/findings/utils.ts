@@ -76,6 +76,9 @@ export function lifeLabel(f, ctx) {
 
 export function toRow(f, ctx) {
   var gg = ctx.g(f);
+  var s2 = ctx.stateOf ? ctx.stateOf(f.key) : gg.state;
+  var inactive =
+    f.lifecycle === "Fixed" || s2 === "fp" || s2 === "accepted";
   return {
     id: f.id,
     risk: f.risk,
@@ -90,27 +93,22 @@ export function toRow(f, ctx) {
     cves: f.cves,
     team: gg.team,
     ticket: gg.ticket,
-    sla:
-      f.lifecycle === "Fixed" || gg.state === "fp" || gg.state === "accepted"
-        ? null
-        : {
-            status: f.breached ? "breached" : f.atRisk ? "at-risk" : "met",
-            days: f.breached ? -f.daysLeft : f.atRisk ? f.daysLeft : undefined,
-          },
+    sla: inactive
+      ? null
+      : {
+          status: f.breached ? "breached" : f.atRisk ? "at-risk" : "met",
+          days: f.breached ? -f.daysLeft : f.atRisk ? f.daysLeft : undefined,
+        },
     snippet: snippetFor(f.name),
     readOnly: ctx.readOnly,
     _f: f,
     /* optional table columns */
-    slaLeft:
-      f.lifecycle === "Fixed" || gg.state === "fp" || gg.state === "accepted"
-        ? null
-        : f.daysLeft,
-    slaLeftTxt:
-      f.lifecycle === "Fixed" || gg.state === "fp" || gg.state === "accepted"
-        ? "—"
-        : f.daysLeft < 0
-          ? "−" + Math.abs(f.daysLeft) + "d"
-          : f.daysLeft + "d",
+    slaLeft: inactive ? null : f.daysLeft,
+    slaLeftTxt: inactive
+      ? "—"
+      : f.daysLeft < 0
+        ? "−" + Math.abs(f.daysLeft) + "d"
+        : f.daysLeft + "d",
     status: gg.fixed ? "Remediated" : gg.status,
     age: f.ageDays,
     ageTxt: f.ageDays + "d",
